@@ -266,8 +266,8 @@ function TopicColumn({ ws, version, topic, index, count, setPositions, dnd, isMo
     if (ok) onRemove();
   };
 
-  const colorItems = [
-    { label: 'None', action: 'color-none', checked: topic.color == null, onSelect: () => store.actions.updateTopic(topic.id, { color: null }) },
+  const swatches = [
+    { label: 'No colour', action: 'color-none', swatch: null, checked: topic.color == null, onSelect: () => store.actions.updateTopic(topic.id, { color: null }) },
     ...TOPIC_COLORS.map((name) => ({
       label: name[0].toUpperCase() + name.slice(1),
       action: `color-${name}`,
@@ -281,7 +281,9 @@ function TopicColumn({ ws, version, topic, index, count, setPositions, dnd, isMo
     { label: collapsed ? 'Expand jokes' : 'Collapse jokes', action: 'collapse', onSelect: () => onCollapse(!collapsed) },
     { label: 'Move left', action: 'move-left', disabled: index === 0, onSelect: () => onMove(index - 1) },
     { label: 'Move right', action: 'move-right', disabled: index === count - 1, onSelect: () => onMove(index + 1) },
-    { label: 'Colour', action: 'color', submenu: colorItems },
+    { divider: true },
+    { header: 'Colour' },
+    { label: 'Colour', swatches },
     { divider: true },
     { label: 'Delete topic', action: 'delete', danger: true, onSelect: deleteTopic },
   ];
@@ -418,17 +420,20 @@ function JokeCard({ ws, version, topic, joke, index, count, position, dnd, isMob
   const radioName = `use-${joke.id}`;
   return html`<article class="joke-card ${inSet ? 'in-set' : ''}" data-card data-testid="joke-card" data-id=${joke.id} ref=${cardRef}>
     <div class="card-head" data-card-header>
-      <label class="pill inset-pill ${inSet ? 'on' : ''}">
-        <input type="checkbox" data-testid="joke-inset" checked=${inSet} onChange=${() => store.actions.toggleInSet(joke.id)} aria-label="In set" />
-        <span>In set</span>
-      </label>
-      ${inSet ? html`<span class="badge" data-testid="joke-badge" title="Position in set">#${position}</span>` : null}
-      <button type="button" class="grip" data-testid="joke-grip" aria-label="Drag to reorder joke" ref=${gripRef}><${Icon} name="grip" size=${18} /></button>
+      <div class="card-meta">
+        <button type="button" class="grip" data-testid="joke-grip" aria-label="Drag to reorder joke" ref=${gripRef}><${Icon} name="grip" size=${18} /></button>
+        <label class="pill inset-pill ${inSet ? 'on' : ''}">
+          <input type="checkbox" data-testid="joke-inset" checked=${inSet} onChange=${() => store.actions.toggleInSet(joke.id)} aria-label="In set" />
+          <span>In set</span>
+        </label>
+        ${inSet ? html`<span class="badge" data-testid="joke-badge" title="Position in set">#${position}</span>` : null}
+        <span class="spacer"></span>
+        <${TimeChip} seconds=${seconds} words=${words} overridden=${overridden} testid="joke-time" />
+        <${IconButton} icon="more" label="Joke menu" testid="joke-menu" buttonRef=${menuButtonRef} onClick=${() => setMenuOpen(true)} aria-haspopup="menu" aria-expanded=${menuOpen} />
+        ${menuOpen ? html`<${Menu} anchor=${menuButtonRef.current} items=${menuItems} label="Joke menu" onClose=${() => setMenuOpen(false)} />` : null}
+      </div>
       <input class="joke-title" data-testid="joke-title" type="text" placeholder="Joke title" value=${title} ref=${titleRef}
         onInput=${onTitleInput} onBlur=${() => store.breakCoalescing()} onKeyDown=${onTitleKeyDown} aria-label="Joke title" />
-      <${TimeChip} seconds=${seconds} words=${words} overridden=${overridden} testid="joke-time" />
-      <${IconButton} icon="more" label="Joke menu" testid="joke-menu" buttonRef=${menuButtonRef} onClick=${() => setMenuOpen(true)} aria-haspopup="menu" aria-expanded=${menuOpen} />
-      ${menuOpen ? html`<${Menu} anchor=${menuButtonRef.current} items=${menuItems} label="Joke menu" onClose=${() => setMenuOpen(false)} />` : null}
     </div>
     <${AutoTextarea} class="joke-text" wrapClass="joke-text-wrap" value=${text} textareaRef=${textRef} data-testid="joke-text"
       placeholder="Write the joke as you'd say it…" aria-label="Joke text" onInput=${onTextInput} onBlur=${() => store.breakCoalescing()} />
@@ -442,7 +447,7 @@ function JokeCard({ ws, version, topic, joke, index, count, position, dnd, isMob
         <${Icon} name="chevronDown" size=${14} /> ${plural(joke.alts.length, 'alt')}
       </button>
     </div>` : null}
-    <div class="alts ${hasAlts && !altsOpen ? 'is-collapsed' : ''}" data-drop="alts" data-joke-id=${joke.id}>
+    <div class="alts ${hasAlts ? 'has-alts' : ''} ${hasAlts && !altsOpen ? 'is-collapsed' : ''}" data-drop="alts" data-joke-id=${joke.id}>
       ${altsOpen ? joke.alts.map((alt, i) => html`<${AltCard} key=${alt.id} topic=${topic} joke=${joke} alt=${alt} index=${i} count=${joke.alts.length}
         radioName=${radioName} dnd=${dnd} isMobile=${isMobile} />`) : null}
       <div class="add-row add-alt-row">
@@ -492,13 +497,13 @@ function AltCard({ topic, joke, alt, index, count, radioName, dnd }) {
 
   return html`<div class="alt-card ${active ? 'active' : ''}" data-card data-testid="alt-card" data-id=${alt.id} ref=${cardRef}>
     <div class="card-head" data-card-header>
+      <button type="button" class="grip" data-testid="alt-grip" aria-label="Drag to reorder alt" ref=${gripRef}><${Icon} name="grip" size=${16} /></button>
       <label class="pill radio-pill ${active ? 'on' : ''}">
         <input type="radio" name=${radioName} data-testid="alt-use" checked=${active}
           onChange=${() => store.actions.setActiveAlt(joke.id, alt.id)} aria-label="Use this alt in the set" />
         <span>Use this in set</span>
       </label>
       <span class="chip alt-chip">${countWords(alt.text)}w</span>
-      <button type="button" class="grip" data-testid="alt-grip" aria-label="Drag to reorder alt" ref=${gripRef}><${Icon} name="grip" size=${16} /></button>
       <${IconButton} icon="more" label="Alt menu" testid="alt-menu" size=${18} buttonRef=${menuButtonRef} onClick=${() => setMenuOpen(true)} aria-haspopup="menu" aria-expanded=${menuOpen} />
       ${menuOpen ? html`<${Menu} anchor=${menuButtonRef.current} items=${menuItems} label="Alt menu" onClose=${() => setMenuOpen(false)} />` : null}
     </div>

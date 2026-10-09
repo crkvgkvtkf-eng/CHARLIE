@@ -292,7 +292,8 @@ function PromptDialog({ request, onDone }) {
 /**
  * @param {object} props
  * @param {Element} props.anchor         the button the menu belongs to (for positioning and focus return)
- * @param {Array} props.items            [{ label, action, target, testid, data, onSelect, disabled, danger, checked, submenu, swatch }, { divider: true }, { header }]
+ * @param {Array} props.items            [{ label, action, target, testid, data, onSelect, disabled, danger, checked, submenu, swatch },
+ *                                        { divider: true }, { header }, { swatches: [{ label, action, swatch, checked, onSelect }] }]
  * @param {(reason: 'select'|'escape'|'outside') => void} props.onClose
  * @param {string} [props.label]         accessible name
  */
@@ -393,6 +394,14 @@ export function Menu({ anchor, items, onClose, label = 'Menu' }) {
     ${visible.map((item, i) => {
       if (item.divider) return html`<div class="menu-divider" role="separator" key=${`d${i}`}></div>`;
       if (item.header) return html`<div class="menu-header" key=${`h${i}`}>${item.header}</div>`;
+      if (item.swatches) {
+        return html`<div class="menu-swatches" role="group" aria-label=${item.label} key=${`s${i}`}>
+          ${item.swatches.map((sw) => html`<button type="button" role="menuitemradio" key=${sw.action} class="menu-item swatch-item ${sw.checked ? 'checked' : ''}"
+            data-testid="menu-item" data-action=${sw.action} aria-checked=${sw.checked} aria-label=${sw.label} title=${sw.label} onClick=${() => select(sw)}>
+            <span class="swatch ${sw.swatch ? '' : 'swatch-none'}" data-color=${sw.swatch}></span>
+          </button>`)}
+        </div>`;
+      }
       const data = item.data || {};
       return html`<button type="button" role="menuitem" key=${item.key ?? item.testid ?? `${item.action ?? item.target ?? i}`}
         class="menu-item ${item.danger ? 'danger' : ''} ${item.back ? 'back' : ''}"

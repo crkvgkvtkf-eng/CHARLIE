@@ -1,0 +1,112 @@
+// Settings (SPEC §9.7 Pace / Appearance): pace changes update every time display live, out-of-range
+// values clamp on blur, the target is entered as m:ss, theme sets data-theme and column width sets --col-w.
+import { test, expect } from '@playwright/test';
+import { formatDuration } from '../../js/timing.js';
+import {
+  buildWorkspace, chipText, closeSettings, jokeCard, open, openSettings, readStored, secondsFor, seed, showSet, words,
+} from './helpers.js';
+
+const TEXT = words(70); // 70 words: 30 s at 140 wpm, 60 s at 70 wpm
+
+function oneJokeInSet() {
+  return buildWorkspace((w, m) => {
+    const t = m.addTopic(w, { title: 'T' });
+    const joke = m.addJoke(w, t, { title: 'Seventy', text: TEXT });
+    m.addToSet(w, joke);
+    return { joke };
+  });
+}
+
+test('words per minute and pause change the joke chip, topic chip and set total', async ({ page, isMobile }) => {
+  const { ws, ids } = oneJokeInSet();
+  await seed(page, ws);
+  await open(page);
+  await expect(jokeCard(page, ids.joke).getByTestId('joke-time')).toHaveText('0:32 · 70w');
+
+  const settings = await openSettings(page, isMobile);
+  await settings.getByTestId('wpm-input').fill('70');
+  await settings.getByTestId('pause-input').fill('0');
+  await expect(settings.locator('.hint').first()).toContainText('350 words ≈ 5:00 at 70 wpm');
+  await closeSettings(page, isMobile);
+
+  await expect(jokeCard(page, ids.joke).getByTestId('joke-time')).toHaveText(chipText(TEXT, { wpm: 70, pauseSec: 0 }));
+  await expect(page.getByTestId('topic-chip')).toHaveText('1/1 in set · 1:00');
+  if (isMobile) await expect(page.getByTestId('tab-set')).toContainText('Set · 1:00');
+  await showSet(page, isMobile);
+  await expect(page.getByTestId('set-total')).toHaveText('1:00');
+  await expect(page.getByTestId('set-delta')).toHaveText('−4:00 under');
+
+  const stored = await readStored(page);
+  expect(stored.settings).toMatchObject({ wpm: 70, pauseSec: 0 });
+
+  // Settings persist across a reload.
+  await page.reload();
+  await expect(jokeCard(page, ids.joke).getByTestId('joke-time')).toHaveText('1:00 · 70w');
+});
+
+test('out-of-range pace values are clamped on blur and partial typing does not fight the input', async ({ page, isMobile }) => {
+  const { ws } = oneJokeInSet();
+  await seed(page, ws);
+  await open(page);
+  const settings = await openSettings(page, isMobile);
+  const wpm = settings.getByTestId('wpm-input');
+  await wpm.fill('1000');
+  await wpm.blur();
+  await expect(wpm).toHaveValue('300');
+  await wpm.fill('');
+  await wpm.pressSequentially('14');
+  await expect(wpm).toHaveValue('14'); // not clamped while typing (SPEC §3.1 updateSettings does not clamp)
+  await wpm.pressSequentially('0');
+  await wpm.blur();
+  await expect(wpm).toHaveValue('140');
+
+  const pause = settings.getByTestId('pause-input');
+  await pause.fill('99');
+  await pause.blur();
+  await expect(pause).toHaveValue('30');
+  await pause.fill('2');
+  await pause.blur();
+  expect((await readStored(page)).settings).toMatchObject({ wpm: 140, pauseSec: 2 });
+});
+
+test('target length is edited as m:ss and drives the delta', async ({ page, isMobile }) => {
+  const { ws } = oneJokeInSet();
+  await seed(page, ws);
+  await open(page);
+  const settings = await openSettings(page, isMobile);
+  const target = settings.getByTestId('target-input');
+  await expect(target).toHaveValue('5:00');
+  await target.fill('0:45');
+  await target.blur();
+  await expect(target).toHaveValue('0:45');
+  await target.fill('nonsense');
+  await target.blur();
+  await expect(target).toHaveValue('0:45'); // invalid input reverts
+  await closeSettings(page, isMobile);
+  await showSet(page, isMobile);
+  await expect(page.getByTestId('set-target')).toHaveText('0:45');
+  await expect(page.getByTestId('set-delta')).toHaveText(`−${formatDuration(45 - secondsFor(TEXT))} under`);
+  await expect(page.getByTestId('set-bar')).toHaveAttribute('data-state', 'neutral');
+});
+
+test('theme and column width apply to the document', async ({ page, isMobile }) => {
+  await open(page);
+  const root = page.locator('html');
+  const settings = await openSettings(page, isMobile);
+  await settings.getByTestId('theme-select').selectOption('dark');
+  await expect(root).toHaveAttribute('data-theme', 'dark');
+  await settings.getByTestId('theme-select').selectOption('light');
+  await expect(root).toHaveAttribute('data-theme', 'light');
+  await settings.getByTestId('colwidth-select').selectOption('420');
+  await expect.poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue('--col-w'))).toBe('420px');
+  await closeSettings(page, isMobile);
+  const stored = await readStored(page);
+  expect(stored.settings).toMatchObject({ theme: 'light', colWidth: 420 });
+
+  if (!isMobile) {
+    await page.getByTestId('add-topic').click();
+    await expect.poll(async () => (await page.getByTestId('topic-card').boundingBox()).width).toBe(420);
+  }
+  await page.reload();
+  await expect(root).toHaveAttribute('data-theme', 'light');
+});

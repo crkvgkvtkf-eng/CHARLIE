@@ -336,6 +336,21 @@ describe('createClient', () => {
       assert.equal((await errorOf(tiny.whoami())).retryAfterMs, 60_000);
     });
 
+    test('a 200 whose body is not JSON (captive portal, proxy page) → network, never a raw SyntaxError', async () => {
+      const client = createClient({ token: 't', fetch: async () => new Response('<html>Sign in to the network</html>', { status: 200 }) });
+      const err = await errorOf(client.whoami());
+      assert.equal(err.kind, 'network');
+      assert.equal(err.status, 200);
+      assert.equal((await errorOf(client.findGist())).kind, 'network');
+    });
+
+    test('a 2xx create/write response without the expected body is reported, not dereferenced', async () => {
+      const client = createClient({ token: 't', fetch: async () => new Response('null', { status: 201 }) });
+      const err = await errorOf(client.createGist('{}'));
+      assert.equal(err.kind, 'other');
+      assert.equal((await errorOf(client.writeGist('g', '{}'))).kind, 'other');
+    });
+
     test('other statuses → other', async () => {
       const client = createClient({ token: 't', fetch: async () => jsonResponse(500, { message: 'oops' }) });
       const err = await errorOf(client.whoami());

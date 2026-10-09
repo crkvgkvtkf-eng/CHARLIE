@@ -2,11 +2,13 @@
  * Bump CACHE whenever any precached asset changes.
  * PRECACHE must list every file under css/, js/, vendor/*.js and icons/ (tests/unit/sw.test.js
  * checks it against disk): add an entry whenever a module or stylesheet is added. */
-const CACHE = 'ssb-v1';
+const CACHE = 'ssb-v2';
 const PRECACHE = [
   './',
   './index.html',
   './manifest.webmanifest',
+  './css/app.css',
+  './js/app.js',
   './js/ids.js',
   './js/lib.js',
   './js/model.js',
@@ -15,6 +17,12 @@ const PRECACHE = [
   './js/syncManager.js',
   './js/store.js',
   './js/timing.js',
+  './js/ui/App.js',
+  './js/ui/Board.js',
+  './js/ui/SetPanel.js',
+  './js/ui/Settings.js',
+  './js/ui/Versions.js',
+  './js/ui/common.js',
   './js/ui/dnd.js',
   './js/undo.js',
   './vendor/hooks.module.js',

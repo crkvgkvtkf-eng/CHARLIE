@@ -93,7 +93,22 @@ export function createClient({ token, fetch = globalThis.fetch, baseUrl = 'https
     const res = await send(baseUrl + path, init);
     if (!res.ok) throw errorFromResponse(res, path, now);
     const text = await res.text();
-    return { data: text === '' ? null : JSON.parse(text), headers: res.headers };
+    let data = null;
+    if (text !== '') {
+      try {
+        data = JSON.parse(text);
+      } catch (err) {
+        // A 2xx that is not JSON did not come from the API: a captive portal or proxy answered.
+        throw new SyncError('Network error — the connection is being intercepted', { kind: 'network', status: res.status, cause: err });
+      }
+    }
+    return { data, headers: res.headers };
+  }
+
+  /** The API object a successful create/write must carry; anything else is an unexpected response. */
+  function expectObject(data, what) {
+    if (data && typeof data === 'object') return data;
+    throw new SyncError(`GitHub returned an unexpected response to ${what}`, { kind: 'other' });
   }
 
   /** The file content of a truncated gist: fetched from raw_url, unauthenticated and uncached. */
@@ -133,7 +148,8 @@ export function createClient({ token, fetch = globalThis.fetch, baseUrl = 'https
         method: 'POST',
         body: { description: GIST_DESCRIPTION, public: false, files: fileSpec(contentString) },
       });
-      return { id: data.id, updated_at: data.updated_at };
+      const gist = expectObject(data, 'creating the gist');
+      return { id: gist.id, updated_at: gist.updated_at };
     },
 
     async readGist(id) {
@@ -153,7 +169,7 @@ export function createClient({ token, fetch = globalThis.fetch, baseUrl = 'https
         method: 'PATCH',
         body: { files: fileSpec(contentString) },
       });
-      return { updated_at: data.updated_at };
+      return { updated_at: expectObject(data, 'writing the gist').updated_at };
     },
   };
 }
