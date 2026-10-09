@@ -209,6 +209,21 @@ export function createSyncManager({
     return true;
   }
 
+  /**
+   * An automatic run (debounce, online, visibility): like syncNow(), but a rejected token is never
+   * retried without connect() — GitHub locks an account out after repeated bad credentials — and a
+   * rate-limit backoff is waited out (the run is rescheduled for when it elapses). A manual
+   * "Sync now" calls syncNow() directly and is exempt from both.
+   */
+  function autoSync() {
+    if (lastError?.kind === 'auth') return;
+    if (now() < retryNotBefore) {
+      scheduleSync();
+      return;
+    }
+    syncNow();
+  }
+
   function scheduleSync() {
     if (!cfg.token || lastError?.kind === 'auth') return;
     if (nav?.onLine === false || lastError?.kind === 'network') return;
@@ -216,7 +231,7 @@ export function createSyncManager({
     const delay = Math.max(DEBOUNCE_MS, retryNotBefore - now());
     debounceTimer = setTimeout(() => {
       debounceTimer = null;
-      syncNow();
+      autoSync();
     }, delay);
   }
 
@@ -227,26 +242,35 @@ export function createSyncManager({
     const who = await candidateClient.whoami();
     const scopes = Array.isArray(who?.scopes) ? who.scopes : [];
     if (scopes.length && !scopes.includes('gist')) throw syncError('auth', GIST_SCOPE_MESSAGE);
-    await withFlight(async () => {
-      // Reuse the candidate client for the trial sync; it becomes the cached client on success.
-      client = candidateClient;
-      clientToken = candidateToken;
-      connecting = true;
-      try {
-        const next = await runOnce({ ...cfg, token: candidateToken, login: who?.login ?? null });
-        if (next === null) throw syncError('other', 'Sync was cancelled.');
-        cfg = next;
-        saveConfig(cfg);
-        recordSuccess();
-      } catch (err) {
-        // Config stays untouched; drop the cached client so the saved token gets a fresh one.
-        client = null;
-        clientToken = null;
-        throw err;
-      } finally {
-        connecting = false;
-      }
-    });
+    try {
+      await withFlight(async () => {
+        // Reuse the candidate client for the trial sync; it becomes the cached client on success.
+        client = candidateClient;
+        clientToken = candidateToken;
+        connecting = true;
+        try {
+          const next = await runOnce({ ...cfg, token: candidateToken, login: who?.login ?? null });
+          if (next === null) throw syncError('other', 'Sync was cancelled.');
+          cfg = next;
+          saveConfig(cfg);
+          recordSuccess();
+        } catch (err) {
+          // Config stays untouched; drop the cached client so the saved token gets a fresh one.
+          client = null;
+          clientToken = null;
+          throw err;
+        } finally {
+          connecting = false;
+        }
+      });
+    } finally {
+      runIfDirty();
+    }
+  }
+
+  /** A sync requested (or an edit made) during a connect/replaceRemote flight is run once it is over. */
+  function runIfDirty() {
+    if (dirty && cfg.token) autoSync();
   }
 
   function disconnect() {
@@ -263,6 +287,14 @@ export function createSyncManager({
 
   async function replaceRemote() {
     if (!cfg.token) throw syncError('auth', 'Connect to GitHub first.');
+    try {
+      await replaceRemoteFlight();
+    } finally {
+      runIfDirty();
+    }
+  }
+
+  async function replaceRemoteFlight() {
     await withFlight(async () => {
       const gen = generation;
       const ws = store.get();
@@ -307,11 +339,11 @@ export function createSyncManager({
     const unsubscribeStore = store.subscribe((_ws, meta) => {
       if (meta?.source !== 'sync') scheduleSync();
     });
-    const onOnline = () => { syncNow(); };
+    const onOnline = () => { autoSync(); };
     const onOffline = () => { notify(); };
     const onVisibility = () => {
-      if (doc.visibilityState === 'visible') syncNow();
-      else if (doc.visibilityState === 'hidden' && cancelScheduled()) syncNow(); // best effort before the page goes away
+      if (doc.visibilityState === 'visible') autoSync();
+      else if (doc.visibilityState === 'hidden' && cancelScheduled()) autoSync(); // best effort before the page goes away
     };
     if (win?.addEventListener) {
       win.addEventListener('online', onOnline);
@@ -326,7 +358,7 @@ export function createSyncManager({
       }
       if (doc?.removeEventListener) doc.removeEventListener('visibilitychange', onVisibility);
     };
-    if (cfg.token) syncNow();
+    if (cfg.token) autoSync();
   }
 
   function stop() {

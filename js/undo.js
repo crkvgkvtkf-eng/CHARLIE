@@ -40,10 +40,14 @@ export function createHistory({ limit = 200, coalesceMs = 1000, now = Date.now }
     while (past.length > limit) past.shift();
   }
 
-  /** Pops the most recent "before" state; `current` becomes redoable. Returns null when nothing to undo. */
+  /**
+   * Pops the most recent "before" state; `current` becomes redoable. Returns null when nothing to
+   * undo. The entry that becomes the new top is closed: the restored state starts a new coalescing
+   * run, so typing right after an undo never merges into an older entry with the same key.
+   */
   function undo(current) {
-    closeTop();
     const entry = past.pop();
+    closeTop();
     if (!entry) return null;
     future.push(current);
     return entry.state;

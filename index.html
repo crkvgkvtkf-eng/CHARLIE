@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>Set Builder</title>
+  <meta name="description" content="Flow-chart style stand-up set builder: topics, jokes, alts, set timing, versions, sync.">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#14111f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Set Builder">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="./css/app.css">
+</head>
+<body>
+  <div id="app"></div>
+
+  <!-- Boot-failure fallback (SPEC §12): plain HTML, no dependency on the app modules. -->
+  <div id="boot-fallback" class="boot-fallback" hidden>
+    <div class="boot-fallback-box">
+      <h1>Set Builder couldn't start</h1>
+      <p id="boot-fallback-reason">The app did not finish loading. Your jokes are still stored in this browser; you can export them now.</p>
+      <p class="boot-fallback-actions">
+        <button type="button" id="boot-export">Export my data</button>
+        <button type="button" id="boot-reload">Reload</button>
+      </p>
+    </div>
+  </div>
+
+  <script>
+    // Shows the fallback if the app has not rendered after 4 s, or if an uncaught error happens
+    // before the first render. js/app.js sets window.__ssbBooted = true after its first render.
+    (function () {
+      var shown = false;
+      function show(reason) {
+        if (window.__ssbBooted || shown) return;
+        shown = true;
+        var box = document.getElementById('boot-fallback');
+        var why = document.getElementById('boot-fallback-reason');
+        if (reason && why) why.textContent = 'Error: ' + reason + ' — your jokes are still stored in this browser; you can export them now.';
+        if (box) box.hidden = false;
+      }
+      function exportData() {
+        var data = {};
+        try {
+          for (var i = 0; i < localStorage.length; i++) {
+            var key = localStorage.key(i);
+            // ssb.sync.v1 holds the GitHub token and is never exported.
+            if (key && key.indexOf('ssb.') === 0 && key !== 'ssb.sync.v1') data[key] = localStorage.getItem(key);
+          }
+        } catch (e) { /* storage unavailable: export whatever was collected */ }
+        var text = JSON.stringify({ app: 'standup-set-builder', exportedAt: new Date().toISOString(), localStorage: data }, null, 2);
+        var url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'standup-set-builder-recovery.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      }
+      document.getElementById('boot-export').addEventListener('click', exportData);
+      document.getElementById('boot-reload').addEventListener('click', function () { location.reload(); });
+      window.addEventListener('error', function (e) {
+        if (!window.__ssbBooted) show((e && e.message) || 'unknown error');
+      });
+      setTimeout(function () { show(''); }, 4000);
+    })();
+  </script>
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

@@ -659,3 +659,99 @@ describe('start / stop triggers', () => {
     assert.equal(seen.length, 2);
   });
 });
+
+describe('regressions', () => {
+  test('a sync requested while connect() is in flight runs after it instead of being dropped', async () => {
+    const { mgr, store, runSync } = setup({ config: null });
+    const gate = deferred();
+    runSync.behave(async (args) => { await gate.promise; return pushOnlyResult(args); });
+    const connecting = mgr.connect('tok');
+    await settle();
+    assert.equal(runSync.calls.length, 1, 'trial sync in flight');
+    const topicId = store.actions.addTopic({ title: 'Typed while connecting' });
+    const requested = mgr.syncNow(); // e.g. the debounce firing during the flight
+    gate.resolve();
+    await connecting;
+    await requested;
+    await settle();
+    assert.equal(runSync.calls.length, 2, 'the follow-up run happened');
+    assert.ok(M.findTopic(runSync.calls[1].workspace, topicId));
+    assert.equal(runSync.calls[1].workspace, store.get());
+    assert.equal(mgr.getStatus().state, 'idle');
+  });
+
+  test('a sync requested while replaceRemote() is in flight runs after it', async () => {
+    const { mgr, store, client, runSync } = setup();
+    const gate = deferred();
+    client.writeGist = async (...args) => { client.calls.push(['writeGist', ...args]); await gate.promise; return { updated_at: 'x' }; };
+    const replacing = mgr.replaceRemote();
+    await settle();
+    store.actions.addTopic({ title: 'Typed while replacing' });
+    const requested = mgr.syncNow();
+    gate.resolve();
+    await replacing;
+    await requested;
+    await settle();
+    assert.equal(runSync.calls.length, 1, 'the dropped request was re-run after the flight');
+    assert.equal(runSync.calls[0].workspace, store.get());
+  });
+
+  test('automatic triggers do not retry a rejected token (only connect() or a manual Sync now may)', async () => {
+    const win = new EventTarget();
+    const doc = new FakeDocument();
+    const { mgr, store, runSync } = setup();
+    runSync.behave(() => { throw failure('auth', 'Bad credentials', { status: 401 }); });
+    mgr.start({ win, doc, nav: { onLine: true } });
+    await settle();
+    assert.equal(mgr.getStatus().errorKind, 'auth');
+
+    doc.visibilityState = 'hidden';
+    doc.dispatchEvent(new Event('visibilitychange'));
+    doc.visibilityState = 'visible';
+    doc.dispatchEvent(new Event('visibilitychange'));
+    win.dispatchEvent(new Event('online'));
+    store.actions.addTopic({ title: 'A' });
+    advance(DEBOUNCE_MS * 2);
+    await settle();
+    assert.equal(runSync.calls.length, 1, 'no automatic run with the rejected token');
+
+    await mgr.syncNow();
+    assert.equal(runSync.calls.length, 2, 'a manual Sync now is still allowed');
+    mgr.stop();
+  });
+
+  test('automatic triggers wait out the rate-limit backoff', async () => {
+    const win = new EventTarget();
+    const doc = new FakeDocument();
+    const { mgr, runSync } = setup();
+    runSync.behave(() => { throw failure('ratelimit', 'slow down', { retryAfterMs: 120_000 }); });
+    mgr.start({ win, doc, nav: { onLine: true } });
+    await settle();
+    assert.equal(mgr.getStatus().errorKind, 'ratelimit');
+
+    doc.visibilityState = 'visible';
+    doc.dispatchEvent(new Event('visibilitychange'));
+    win.dispatchEvent(new Event('online'));
+    await settle();
+    assert.equal(runSync.calls.length, 1, 'not before retryAfterMs');
+    advance(120_000);
+    await settle();
+    assert.equal(runSync.calls.length, 2, 'a retry is scheduled for when the backoff elapses');
+    assert.equal(mgr.getStatus().state, 'idle');
+    mgr.stop();
+  });
+
+  test('a debounce that was armed before an auth error does not fire with the rejected token', async () => {
+    const { mgr, store, runSync } = setup();
+    mgr.start({ win: new EventTarget(), doc: new FakeDocument(), nav: { onLine: true } });
+    await settle();
+    store.actions.addTopic({ title: 'A' }); // arms the debounce
+    runSync.behave(() => { throw failure('auth', 'Bad credentials', { status: 401 }); });
+    await mgr.syncNow(); // the manual run that discovers the rejected token
+    assert.equal(mgr.getStatus().errorKind, 'auth');
+    advance(DEBOUNCE_MS);
+    await settle();
+    assert.equal(runSync.calls.length, 2, 'the armed debounce did not run again');
+    mgr.stop();
+  });
+});

@@ -66,6 +66,11 @@ function stampRestored(current, restored, now) {
     }
   }
   if (stableJson(current.settings) !== stableJson(ws.settings)) ws.settingsUpdatedAt = stamp;
+  // A tombstone the restore (re)introduces is a deletion happening now: with its old time it would
+  // lose a merge against the version it deletes, which the undo stamped past that time.
+  for (const id of Object.keys(ws.tombstones)) {
+    if (current.tombstones[id] !== ws.tombstones[id]) ws.tombstones[id] = stamp;
+  }
   ws.updatedAt = stamp;
   return ws;
 }

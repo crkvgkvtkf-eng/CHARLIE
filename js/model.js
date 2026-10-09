@@ -229,9 +229,14 @@ function normalizeVersion(raw, seen) {
   };
 }
 
+const WORKSPACE_KEYS = new Set(['schemaVersion', 'id', 'settings', 'settingsUpdatedAt', 'activeVersionId', 'versions', 'tombstones', 'updatedAt']);
+
 /** Repair a workspace of unknown provenance in place and return it. Throws only for non-object input. */
 export function normalize(ws) {
   if (!isObject(ws)) throw new Error('Workspace must be an object');
+  // Unknown root keys are dropped like every other stray field: merge rebuilds the workspace from
+  // the known keys only, so anything extra would read as a local change on every sync.
+  for (const key of Object.keys(ws)) if (!WORKSPACE_KEYS.has(key)) delete ws[key];
   ws.schemaVersion = SCHEMA_VERSION;
   if (typeof ws.id !== 'string' || ws.id === '') ws.id = newId();
   ws.settings = normalizeSettings(ws.settings);

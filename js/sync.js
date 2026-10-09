@@ -174,13 +174,14 @@ function pickWinner(a, b) {
   return aj <= bj ? [a, b] : [b, a];
 }
 
-/** Deterministic entity id remap used by conflict copies. */
-function copyId(id) {
-  return id == null ? null : `${id}~c`;
-}
-
-/** Rule 3c: a deep copy of `v` under a deterministic id, with every entity id remapped. */
+/**
+ * Rule 3c: a deep copy of `v` under a deterministic id, with every entity id remapped. The remap
+ * carries the version's `updatedAt` (like the copy's own id) so that two conflict copies of the
+ * same version made at different times never share topic/joke/alt ids: ids must stay unique
+ * across the workspace, and normalize would otherwise re-id the later copy and empty its set.
+ */
 function conflictCopy(v) {
+  const copyId = (id) => (id == null ? null : `${id}~c~${v.updatedAt}`);
   return {
     id: `${v.id}~conflict~${v.updatedAt}`,
     name: `${v.name} (conflict copy)`,

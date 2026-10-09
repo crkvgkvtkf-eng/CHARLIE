@@ -413,3 +413,40 @@ describe('subscribe', () => {
     assert.ok(nowIso() > store.get().updatedAt, 'the fake clock keeps increasing');
   });
 });
+
+describe('regressions', () => {
+  test('typing right after an undo never merges into the entry below the undone one', () => {
+    const { store } = makeStore();
+    const { jokeId } = seed(store);
+    const textOf = () => M.findJoke(store.get(), jokeId).joke.text;
+    store.actions.updateJoke(jokeId, { text: 'a' });
+    store.actions.updateJoke(jokeId, { text: 'ab' });
+    store.actions.updateJoke(jokeId, { title: 'Other field' });
+    assert.equal(store.undo(), true);
+    assert.equal(textOf(), 'ab');
+    store.actions.updateJoke(jokeId, { text: 'abc' }); // same key, within the idle window
+    assert.equal(store.undo(), true);
+    assert.equal(textOf(), 'ab', 'the post-undo keystroke is its own undo step');
+    assert.equal(store.undo(), true);
+    assert.equal(textOf(), 'My cat pays rent');
+  });
+
+  test('redo of a deletion re-stamps the restored tombstone so the deletion wins a later merge', () => {
+    const { store } = makeStore();
+    store.actions.addVersion({ name: 'Two' });
+    const twoId = store.get().activeVersionId;
+    store.actions.deleteVersion(twoId);
+    const deletedAt = store.get().tombstones[twoId];
+    assert.equal(store.undo(), true);
+    const revived = store.get().versions.find((v) => v.id === twoId);
+    assert.ok(revived.updatedAt > deletedAt, 'the undo stamped the revived version past the tombstone');
+    assert.equal(store.redo(), true);
+    const ws = store.get();
+    assert.equal(ws.versions.some((v) => v.id === twoId), false);
+    assert.ok(ws.tombstones[twoId] > revived.updatedAt, 'the tombstone is newer than the revived version it deletes');
+    assert.equal(ws.tombstones[twoId], ws.updatedAt);
+    // Undoing again drops the tombstone as it was (no tombstone before the deletion).
+    assert.equal(store.undo(), true);
+    assert.deepEqual(store.get().tombstones, {});
+  });
+});

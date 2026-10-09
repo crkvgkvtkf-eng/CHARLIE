@@ -164,3 +164,17 @@ test('stored states are returned by identity, never copied or mutated', () => {
   h.push(before);
   assert.equal(h.undo({ versions: [] }), before);
 });
+
+test('undo closes the entry that becomes the top, so typing right after an undo starts a new run', () => {
+  const clock = fakeClock();
+  const h = createHistory({ now: clock.now, coalesceMs: 1000 });
+  h.push('', { coalesceKey: 'text' });
+  h.push('a', { coalesceKey: 'text' }); // coalesces: one entry holding ''
+  h.push('ab', { coalesceKey: 'title' }); // a different field
+  assert.equal(h.undo('ab+title'), 'ab');
+  // Still inside the idle window of the 'text' entry: a restore must not let this merge into it.
+  h.push('ab', { coalesceKey: 'text' });
+  assert.equal(h.undo('abc'), 'ab', 'undo returns the state before the post-undo typing');
+  assert.equal(h.undo('ab'), '');
+  assert.equal(h.canUndo(), false);
+});

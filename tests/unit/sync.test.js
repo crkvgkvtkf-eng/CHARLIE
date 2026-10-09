@@ -445,10 +445,13 @@ describe('merge', () => {
     assert.equal(copy.name, 'Set v1 (conflict copy)');
     assert.equal(copy.createdAt, aV.updatedAt);
     assert.equal(copy.updatedAt, aV.updatedAt);
-    assert.equal(copy.topics[0].id, `${topicId}~c`);
-    assert.deepEqual(copy.topics[0].jokes.map((j) => j.id), [`${jokeId}~c`]);
+    // Entity ids are remapped deterministically and carry the version's updatedAt (like the copy id)
+    // so copies of the same version made at different times never share ids.
+    const c = (id) => `${id}~c~${aV.updatedAt}`;
+    assert.equal(copy.topics[0].id, c(topicId));
+    assert.deepEqual(copy.topics[0].jokes.map((j) => j.id), [c(jokeId)]);
     assert.equal(copy.topics[0].jokes[0].text, 'A text');
-    assert.deepEqual(copy.set.jokeIds, [`${jokeId}~c`]);
+    assert.deepEqual(copy.set.jokeIds, [c(jokeId)]);
     assert.equal(copy.set.updatedAt, aV.set.updatedAt);
     // Nothing else leaks: normalizing the merged workspace is a no-op (ids unique, shape valid).
     assert.equal(stable(M.normalize(clone(r.workspace))), stable(r.workspace));
@@ -467,9 +470,10 @@ describe('merge', () => {
     const r = mergeBothWays(a, b, { synced });
     const copy = r.workspace.versions.find((v) => v.id.includes('~conflict~'));
     assert.ok(copy);
-    assert.equal(copy.topics[0].id, `${topicId}~c`);
-    assert.equal(copy.topics[0].jokes[0].alts[0].id, `${altId}~c`);
-    assert.equal(copy.topics[0].jokes[0].activeAltId, `${altId}~c`);
+    const c = (id) => `${id}~c~${a.versions[0].updatedAt}`;
+    assert.equal(copy.topics[0].id, c(topicId));
+    assert.equal(copy.topics[0].jokes[0].alts[0].id, c(altId));
+    assert.equal(copy.topics[0].jokes[0].activeAltId, c(altId));
   });
 
   test('rule 3a: only one side changed → plain last-writer-wins, no copy', () => {
@@ -924,5 +928,116 @@ describe('syncedMapOf', () => {
       [v2]: byId(ws, v2).updatedAt,
     });
     assert.deepEqual(syncedMapOf({}), {});
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regressions and property checks
+
+describe('merge regressions', () => {
+  /** Every topic/joke/alt id in the workspace. */
+  function entityIds(ws) {
+    const ids = [];
+    for (const v of ws.versions) {
+      for (const t of v.topics) {
+        ids.push(t.id);
+        for (const j of t.jokes) {
+          ids.push(j.id);
+          for (const a of j.alts) ids.push(a.id);
+        }
+      }
+    }
+    return ids;
+  }
+
+  test('a second conflict on the same version while the first copy still exists keeps every entity id unique', () => {
+    const { ws, jokeId } = seeded();
+    const altId = M.addAlt(ws, jokeId, { text: 'alt' });
+    M.setActiveAlt(ws, jokeId, altId);
+    const synced1 = syncedMapOf(ws);
+    const a1 = clone(ws);
+    M.updateJoke(a1, jokeId, { text: 'A1' });
+    const b1 = clone(ws);
+    M.updateJoke(b1, jokeId, { text: 'B1' });
+    const first = mergeBothWays(a1, b1, { synced: synced1 });
+    assert.equal(first.conflictCopies.length, 1);
+
+    // Both devices adopted the first merge (copy included) and diverge again on the original version.
+    const synced2 = syncedMapOf(first.workspace);
+    const a2 = clone(first.workspace);
+    M.updateJoke(a2, jokeId, { text: 'A2' });
+    const b2 = clone(first.workspace);
+    M.updateJoke(b2, jokeId, { text: 'B2' });
+    const second = mergeBothWays(a2, b2, { synced: synced2 });
+    assert.equal(second.conflictCopies.length, 1);
+    assert.equal(second.workspace.versions.length, 3);
+
+    const ids = entityIds(second.workspace);
+    assert.equal(new Set(ids).size, ids.length, 'entity ids unique across the whole workspace');
+    const copies = second.workspace.versions.filter((v) => v.id.includes('~conflict~'));
+    for (const copy of copies) {
+      assert.equal(copy.set.jokeIds.length, 1, 'each copy keeps its set');
+      assert.equal(copy.topics[0].jokes[0].activeAltId, copy.topics[0].jokes[0].alts[0].id, 'each copy keeps its active alt');
+    }
+    // normalize (which the store applies on adoption) must not have to repair anything.
+    assert.equal(stable(M.normalize(clone(second.workspace))), stable(second.workspace));
+    // A retry of the same merge unions cleanly.
+    const retry = mergeBothWays(second.workspace, b2, { synced: synced2 });
+    assert.deepEqual(retry.conflictCopies, []);
+    assert.equal(stable(retry.workspace), stable(second.workspace));
+  });
+
+  test('property: random divergent histories merge symmetrically, keep ids unique and survive normalize and retries', () => {
+    // Deterministic LCG so a failure is reproducible.
+    let seed = 20240101;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
+    setClock(() => new Date(Date.UTC(2024, 0, 1) + (tick += 1 + Math.floor(rnd() * 3)) * 1000));
+
+    function randomEdit(target) {
+      const version = M.activeVersion(target);
+      const jokes = version.topics.flatMap((t) => t.jokes);
+      switch (pick(['topic', 'joke', 'edit', 'toggle', 'alt', 'version', 'delete', 'rename', 'switch', 'remove', 'settings'])) {
+        case 'topic': M.addTopic(target, { title: `t${idCounter}` }); break;
+        case 'joke': if (version.topics.length) M.addJoke(target, pick(version.topics).id, { text: `joke ${idCounter}` }); break;
+        case 'edit': if (jokes.length) M.updateJoke(target, pick(jokes).id, { text: `edited ${idCounter}` }); break;
+        case 'toggle': if (jokes.length) M.toggleInSet(target, pick(jokes).id); break;
+        case 'alt': if (jokes.length) { const j = pick(jokes).id; M.setActiveAlt(target, j, M.addAlt(target, j, { text: 'alt' })); } break;
+        case 'version': M.addVersion(target, { fromVersionId: rnd() < 0.5 ? null : target.activeVersionId }); break;
+        case 'delete': if (target.versions.length > 1) M.deleteVersion(target, pick(target.versions).id); break;
+        case 'rename': M.renameVersion(target, pick(target.versions).id, `n${idCounter}`); break;
+        case 'switch': M.switchVersion(target, pick(target.versions).id); break;
+        case 'remove': if (jokes.length) M.removeJoke(target, pick(jokes).id); break;
+        case 'settings': M.updateSettings(target, { wpm: 60 + Math.floor(rnd() * 200) }); break;
+        default: break;
+      }
+    }
+    const diverge = (base, synced) => {
+      const a = clone(base);
+      const b = clone(base);
+      for (let k = Math.floor(rnd() * 6); k > 0; k--) randomEdit(a);
+      for (let k = Math.floor(rnd() * 6); k > 0; k--) randomEdit(b);
+      return check(a, b, synced);
+    };
+    const check = (a, b, synced) => {
+      const r = mergeBothWays(a, b, { synced });
+      const ids = entityIds(r.workspace);
+      assert.equal(new Set(ids).size, ids.length, 'entity ids unique');
+      assert.equal(stable(M.normalize(clone(r.workspace))), stable(r.workspace), 'normalize is a no-op on a merge result');
+      assert.ok(r.workspace.versions.some((v) => v.id === r.workspace.activeVersionId), 'active version exists');
+      const retry = merge(r.workspace, b, { synced });
+      assert.deepEqual(retry.conflictCopies, [], 'a retry creates no new copies');
+      assert.equal(stable(retry.workspace.versions), stable(r.workspace.versions), 'a retry keeps the version set');
+      return r;
+    };
+
+    for (let i = 0; i < 150; i++) {
+      const base = M.createWorkspace();
+      for (let k = 0; k < 8; k++) randomEdit(base);
+      const synced = rnd() < 0.2 ? {} : syncedMapOf(base);
+      const first = diverge(base, synced);
+      // Second round from the merged state, so earlier conflict copies coexist with new ones.
+      diverge(first.workspace, syncedMapOf(first.workspace));
+    }
   });
 });

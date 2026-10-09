@@ -612,3 +612,34 @@ describe('normalize', () => {
     assert.equal(M.stableJson(M.normalize(structuredClone(ws))), before);
   });
 });
+
+describe('normalize hardening', () => {
+  test('strips unknown root keys so an imported workspace merges with itself unchanged', () => {
+    const ws = M.normalize({ versions: [{ id: 'v' }], junk: { nested: [1, 2, 3] }, token: 'never' });
+    assert.deepEqual(
+      Object.keys(ws).sort(),
+      ['activeVersionId', 'id', 'schemaVersion', 'settings', 'settingsUpdatedAt', 'tombstones', 'updatedAt', 'versions'],
+    );
+  });
+  test('garbage of every shape is survived and the result is idempotent', () => {
+    const inputs = [
+      { versions: [{ id: 'v', topics: [{ id: 't', jokes: [{ id: 'j', alts: [{ id: 'a', text: { deep: true } }], activeAltId: 'a', overrideSec: Infinity }] }], set: { jokeIds: 'j' } }] },
+      { versions: [{ id: 'v', set: { jokeIds: [null, undefined, 5, {}] } }], tombstones: { v: null }, activeVersionId: {} },
+      { versions: [{ id: 'v', createdAt: 1e30, updatedAt: -1 }, { id: 'v', updatedAt: '2024-01-01T00:00:00.000Z' }], settings: { wpm: [], pauseSec: {}, targetSec: true, colWidth: [] } },
+      { versions: [{ id: 'v', topics: [{ id: 'v', jokes: [{ id: 'v', alts: [{ id: 'v' }] }] }] }] },
+      { id: '', versions: [{ id: '', topics: [{ id: '' , jokes: [{ id: '', alts: [{ id: '' }] }] }] }] },
+    ];
+    for (const input of inputs) {
+      const once = M.normalize(structuredClone(input));
+      const twice = M.normalize(structuredClone(once));
+      assert.equal(M.stableJson(twice), M.stableJson(once));
+      assert.equal(once.versions.length, 1);
+      assert.equal(once.activeVersionId, once.versions[0].id);
+      for (const v of once.versions) {
+        assert.equal(typeof v.id, 'string');
+        assert.notEqual(v.id, '');
+        for (const id of v.set.jokeIds) assert.ok(v.topics.some((t) => t.jokes.some((j) => j.id === id)));
+      }
+    }
+  });
+});
