@@ -51,10 +51,12 @@ test('a typing run is one undo step; a pause or blur starts a new one', async ({
   await expect(undo).toBeDisabled();
 
   await title.click();
+  await title.press('End');
   await title.pressSequentially(' overhead');
   await expect(title).toHaveValue('Lost luggage overhead');
   await title.blur(); // ends the coalescing run
   await title.click();
+  await title.press('End');
   await title.pressSequentially(' bin');
   await expect(title).toHaveValue('Lost luggage overhead bin');
   await title.blur();
@@ -115,20 +117,22 @@ test('keyboard shortcuts undo and redo outside text fields', async ({ page, isMo
   test.skip(isMobile, 'hardware keyboard shortcuts are a desktop feature');
   await open(page);
   await page.getByTestId('add-topic').click();
-  const title = page.getByTestId('topic-title');
-  await title.fill('Airports');
+  await page.getByTestId('add-joke').click();
+  await expect(page.getByTestId('joke-title')).toBeFocused();
 
-  // Inside a text field the shortcut is left to the browser's native undo of the field.
+  // Inside a text field the shortcut belongs to the field's native undo: the app history is untouched.
   await page.keyboard.press('Control+z');
-  await expect(page.getByTestId('topic-card')).toHaveCount(1);
+  await expect(page.getByTestId('joke-card')).toHaveCount(1);
+  await expect(page.getByTestId('redo')).toBeDisabled();
 
-  await title.blur();
-  await page.keyboard.press('Control+z'); // title text
-  await expect(title).toHaveValue('');
+  await page.getByTestId('joke-title').blur();
+  await page.keyboard.press('Control+z'); // joke
+  await expect(page.getByTestId('joke-card')).toHaveCount(0);
   await page.keyboard.press('Control+z'); // topic
   await expect(page.getByTestId('empty-board')).toBeVisible();
   await page.keyboard.press('Control+Shift+z');
   await expect(page.getByTestId('topic-card')).toHaveCount(1);
   await page.keyboard.press('Control+y');
-  await expect(page.getByTestId('topic-title')).toHaveValue('Airports');
+  await expect(page.getByTestId('joke-card')).toHaveCount(1);
+  await expect(page.getByTestId('redo')).toBeDisabled();
 });

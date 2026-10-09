@@ -3,7 +3,7 @@
 import { test, expect } from '@playwright/test';
 import { formatDuration } from '../../js/timing.js';
 import {
-  altCard, answerDialog, chooseFromMenu, chipText, jokeCard, jokeIdsOn, open, openMenu, pickMenuItem,
+  altCard, answerDialog, chooseFromMenu, confirmDialog, chipText, jokeCard, jokeIdsOn, open, openMenu, pickMenuItem,
   readStored, sampleWorkspace, secondsFor, seed, topicCard, words,
 } from './helpers.js';
 
@@ -87,7 +87,7 @@ test.describe('topic menu', () => {
 
     // Delete: the confirm names the joke count; cancelling keeps everything.
     await chooseFromMenu(page, airports.getByTestId('topic-menu'), 'delete');
-    await expect(page.getByTestId('dialog')).toContainText('3 jokes');
+    await expect(confirmDialog(page)).toContainText('3 jokes');
     await answerDialog(page, { confirm: false });
     await expect(page.getByTestId('topic-card')).toHaveCount(2);
 
@@ -204,7 +204,7 @@ test.describe('joke menu', () => {
     await seed(page, ws);
     await open(page);
     await chooseFromMenu(page, jokeCard(page, ids.security).getByTestId('joke-menu'), 'delete');
-    await expect(page.getByTestId('dialog')).toContainText('Security line');
+    await expect(confirmDialog(page)).toContainText('Security line');
     await answerDialog(page, { confirm: false });
     await expect(jokeCard(page, ids.security)).toHaveCount(1);
     await chooseFromMenu(page, jokeCard(page, ids.security).getByTestId('joke-menu'), 'delete');
@@ -216,7 +216,7 @@ test.describe('joke menu', () => {
     await topicCard(page, ids.dating).getByTestId('add-joke').click();
     const blank = topicCard(page, ids.dating).getByTestId('joke-card').nth(2);
     await chooseFromMenu(page, blank.getByTestId('joke-menu'), 'delete');
-    await expect(page.getByTestId('dialog')).toHaveCount(0);
+    await expect(confirmDialog(page)).toHaveCount(0);
     await expect(topicCard(page, ids.dating).getByTestId('joke-card')).toHaveCount(2);
   });
 });

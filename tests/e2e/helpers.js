@@ -63,11 +63,15 @@ export function sampleWorkspace() {
   });
 }
 
-/** Writes `ws` under STORAGE_KEY before every navigation of `page` (or a context). */
+/**
+ * Seeds `ws` under STORAGE_KEY before the first navigation of `page` (or a context). The init
+ * script runs again on every reload, so it only writes while the key is still absent: what the
+ * app saved afterwards must survive a reload exactly as it would for a user.
+ */
 export async function seed(target, ws) {
   await target.addInitScript(([key, json]) => {
     try {
-      localStorage.setItem(key, json);
+      if (localStorage.getItem(key) === null) localStorage.setItem(key, json);
     } catch {
       // Storage unavailable: the app falls back to an empty workspace and the test will say so.
     }
@@ -171,13 +175,26 @@ export async function chooseFromMenu(page, button, action, target) {
   await pickMenuItem(page, action, target);
 }
 
-/** Confirms (or cancels) the open confirm/prompt dialog. */
+/**
+ * The open confirm / prompt dialog. The settings dialog is a `dialog` too, so the one holding the
+ * confirm button is the one meant here.
+ */
+export function confirmDialog(page) {
+  return page.locator('[data-testid="dialog"]:has([data-testid="dialog-confirm"])');
+}
+
+/**
+ * Confirms (or cancels) the open confirm/prompt dialog and waits until it is gone. A follow-up
+ * confirm (double confirms) reuses the same element, so "gone" means its title has changed or the
+ * element has been removed.
+ */
 export async function answerDialog(page, { confirm = true, text } = {}) {
-  const dialog = page.getByTestId('dialog');
+  const dialog = confirmDialog(page);
   await expect(dialog).toBeVisible();
+  const title = await dialog.locator('.dialog-title').innerText();
   if (text !== undefined) await dialog.getByTestId('dialog-input').fill(text);
   await dialog.getByTestId(confirm ? 'dialog-confirm' : 'dialog-cancel').click();
-  await expect(dialog).toHaveCount(0);
+  await expect(dialog.filter({ has: page.locator('.dialog-title', { hasText: title }) })).toHaveCount(0);
 }
 
 // ---------------------------------------------------------------------------
@@ -189,8 +206,13 @@ async function centerOf(locator) {
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
 
-/** A point just inside the top or bottom edge of a card: dropping there lands before / after it. */
+/**
+ * A point just inside an edge of a card: dropping there lands before (top/left) or after
+ * (bottom/right) it. The card is scrolled into view first, as a user would before dropping, so
+ * the point is one `elementFromPoint` can hit.
+ */
 export async function edgeOf(locator, side) {
+  await locator.scrollIntoViewIfNeeded();
   const box = await locator.boundingBox();
   if (!box) throw new Error('Element has no bounding box (not rendered?)');
   const x = box.x + box.width / 2;
