@@ -5,7 +5,7 @@
   "description": "Flow-chart style stand-up set builder: topics, jokes, alts, set timing, undo, versions, cross-device sync.",
   "type": "module",
   "scripts": {
-    "start": "node tests/serve.mjs 4173",
+    "start": "node tests/serve.mjs 4173 --base /CHARLIE/",
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "node --test tests/unit/",
     "test:e2e": "playwright test",

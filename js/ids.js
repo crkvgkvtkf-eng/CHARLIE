@@ -1,19 +1,26 @@
-// Id and clock helpers. The clock is injectable so tests can produce deterministic timestamps.
+// Id and clock helpers. Both are injectable so tests can produce deterministic ids and timestamps.
 
-let clock = () => new Date();
+let clock = null;
+let idFactory = null;
 
-/** Override the clock (tests). Pass null to restore the real clock. */
+/** Override the clock with a function returning a Date (tests). Pass null to restore the real clock. */
 export function setClock(fn) {
-  clock = fn || (() => new Date());
+  clock = typeof fn === 'function' ? fn : null;
+}
+
+/** Override id generation with a function returning a string (tests). Pass null to restore. */
+export function setIdFactory(fn) {
+  idFactory = typeof fn === 'function' ? fn : null;
 }
 
 /** Current time as an ISO-8601 UTC string. */
 export function nowIso() {
-  return clock().toISOString();
+  return (clock ? clock() : new Date()).toISOString();
 }
 
 /** Opaque unique id. Uses crypto.randomUUID when available (iOS 15.4+, all modern desktops). */
 export function newId() {
+  if (idFactory) return String(idFactory());
   const c = globalThis.crypto;
   if (c && typeof c.randomUUID === 'function') return c.randomUUID();
   let rand = '';

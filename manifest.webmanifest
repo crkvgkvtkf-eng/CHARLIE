@@ -1,6 +1,7 @@
 {
   "name": "Stand-Up Set Builder",
   "short_name": "Set Builder",
+  "id": "./",
   "description": "Flow-chart style stand-up set builder: topics, jokes, alts, set timing, versions, sync.",
   "start_url": "./",
   "scope": "./",

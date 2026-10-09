@@ -26,7 +26,10 @@ Every push to that branch updates the live app. Installed copies pick the update
 
 ## 2. Install it
 
-- **iPhone:** open the URL in Safari → Share → **Add to Home Screen**. It then opens full screen, works offline, and keeps its own data.
+- **iPhone:** open the URL in Safari → Share → **Add to Home Screen**. It then opens full screen and works offline.
+  The installed app has its **own storage**: it does not see jokes or the sync token you entered in the Safari tab.
+  Connect Sync in both, or Export JSON in Safari and Import in the installed app. (Safari may also clear a plain tab's
+  local data after 7 days without a visit; the installed app is exempt.)
 - **Mac / desktop:** open the URL in Chrome, Edge or Safari. Chrome/Edge: address-bar **Install** icon. Safari (macOS Sonoma+): File → **Add to Dock**. Plain browser tabs work too.
 
 ## 3. Sync desktop ↔ iPhone (optional, one token)
