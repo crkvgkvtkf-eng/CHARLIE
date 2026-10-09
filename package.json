@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node tests/serve.mjs 4173 --base /CHARLIE/",
     "test": "npm run test:unit && npm run test:e2e",
-    "test:unit": "node --test tests/unit/",
+    "test:unit": "node --test 'tests/unit/*.test.js'",
     "test:e2e": "playwright test",
     "lint": "eslint js tests"
   },
