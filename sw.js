@@ -1,35 +1,27 @@
 /* Service worker: cache-first app shell so the app opens offline.
- * Bump CACHE whenever any precached asset changes. */
+ * Bump CACHE whenever any precached asset changes.
+ * PRECACHE must list every file under css/, js/, vendor/*.js and icons/ (tests/unit/sw.test.js
+ * checks it against disk): add an entry whenever a module or stylesheet is added. */
 const CACHE = 'ssb-v1';
 const PRECACHE = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './css/app.css',
-  './js/app.js',
-  './js/lib.js',
   './js/ids.js',
+  './js/lib.js',
   './js/model.js',
-  './js/timing.js',
-  './js/undo.js',
   './js/storage.js',
   './js/sync.js',
-  './js/syncManager.js',
-  './js/store.js',
+  './js/timing.js',
   './js/ui/dnd.js',
-  './js/ui/App.js',
-  './js/ui/Board.js',
-  './js/ui/SetPanel.js',
-  './js/ui/Versions.js',
-  './js/ui/Settings.js',
-  './js/ui/common.js',
-  './vendor/preact.module.js',
+  './js/undo.js',
   './vendor/hooks.module.js',
   './vendor/htm.module.js',
-  './icons/icon.svg',
+  './vendor/preact.module.js',
+  './icons/apple-touch-icon.png',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  './icons/apple-touch-icon.png',
+  './icons/icon.svg',
 ];
 
 self.addEventListener('install', (event) => {
