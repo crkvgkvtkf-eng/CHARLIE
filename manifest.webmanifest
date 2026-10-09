@@ -1,0 +1,16 @@
+{
+  "name": "Stand-Up Set Builder",
+  "short_name": "Set Builder",
+  "description": "Flow-chart style stand-up set builder: topics, jokes, alts, set timing, versions, sync.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#14111f",
+  "theme_color": "#14111f",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
