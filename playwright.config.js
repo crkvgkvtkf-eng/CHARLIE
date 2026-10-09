@@ -26,6 +26,10 @@ export default defineConfig({
   },
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1400, height: 900 } } },
-    { name: 'iphone', use: { ...devices['iPhone 14'] } },
+    // iPhone 14 emulation (viewport, touch, mobile UA, scale). Runs on Chromium unless PW_IPHONE_BROWSER=webkit,
+    // because only Chromium is installed in the cloud build container; on a Mac run
+    //   npx playwright install webkit && PW_IPHONE_BROWSER=webkit npx playwright test --project=iphone
+    // to exercise the real WebKit engine (closest to iOS Safari).
+    { name: 'iphone', use: { ...devices['iPhone 14'], defaultBrowserType: process.env.PW_IPHONE_BROWSER || 'chromium' } },
   ],
 });

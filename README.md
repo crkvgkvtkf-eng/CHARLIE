@@ -57,6 +57,8 @@ npm start            # serves the app at http://127.0.0.1:4173/
 ```bash
 npm run test:unit    # data model, timing, undo, storage, sync merge (node --test)
 npm run test:e2e     # Playwright, desktop + iPhone projects (first time: npx playwright install chromium)
+# The iPhone project emulates an iPhone 14 in Chromium by default. To run it on the real WebKit engine
+# (closest to iOS Safari): npx playwright install webkit && PW_IPHONE_BROWSER=webkit npm run test:e2e
 npm test             # both
 ```
 
