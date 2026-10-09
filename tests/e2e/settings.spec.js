@@ -82,6 +82,14 @@ test('target length is edited as m:ss and drives the delta', async ({ page, isMo
   await target.fill('nonsense');
   await target.blur();
   await expect(target).toHaveValue('0:45'); // invalid input reverts
+  // Typed one key at a time the field must not be re-formatted underneath the user ("6:3" is 363 s = "6:03").
+  await target.fill('');
+  await target.pressSequentially('6:30');
+  await expect(target).toHaveValue('6:30');
+  await target.blur();
+  await expect(target).toHaveValue('6:30');
+  await target.fill('0:45');
+  await target.blur();
   await closeSettings(page, isMobile);
   await showSet(page, isMobile);
   await expect(page.getByTestId('set-target')).toHaveText('0:45');
@@ -89,14 +97,42 @@ test('target length is edited as m:ss and drives the delta', async ({ page, isMo
   await expect(page.getByTestId('set-bar')).toHaveAttribute('data-state', 'neutral');
 });
 
+test('each pace field is its own undo step', async ({ page, isMobile }) => {
+  const { ws } = oneJokeInSet();
+  await seed(page, ws);
+  await open(page);
+  const settings = await openSettings(page, isMobile);
+  await settings.getByTestId('wpm-input').fill('150');
+  await settings.getByTestId('pause-input').fill('3'); // moving on blurs wpm, which ends its undo run
+  await settings.getByTestId('pause-input').blur();
+  await closeSettings(page, isMobile);
+  await page.getByTestId('undo').click();
+  await expect.poll(async () => (await readStored(page)).settings).toMatchObject({ wpm: 150, pauseSec: 2 });
+  await page.getByTestId('undo').click();
+  await expect.poll(async () => (await readStored(page)).settings).toMatchObject({ wpm: 140, pauseSec: 2 });
+});
+
+/** The `theme-color` meta content and the top bar's --topbar token (what §9.1 says it must match). */
+async function themeColors(page) {
+  return page.evaluate(() => ({
+    meta: document.querySelector('meta[name="theme-color"]').content,
+    topbar: getComputedStyle(document.documentElement).getPropertyValue('--topbar').trim(),
+  }));
+}
+
 test('theme and column width apply to the document', async ({ page, isMobile }) => {
   await open(page);
   const root = page.locator('html');
   const settings = await openSettings(page, isMobile);
   await settings.getByTestId('theme-select').selectOption('dark');
   await expect(root).toHaveAttribute('data-theme', 'dark');
+  const dark = await themeColors(page);
+  expect(dark.meta).toBe(dark.topbar); // the status-bar tint follows the (darker) dark top bar
   await settings.getByTestId('theme-select').selectOption('light');
   await expect(root).toHaveAttribute('data-theme', 'light');
+  const light = await themeColors(page);
+  expect(light.meta).toBe(light.topbar);
+  expect(light.meta).not.toBe(dark.meta);
   await settings.getByTestId('colwidth-select').selectOption('420');
   await expect.poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue('--col-w'))).toBe('420px');
   await closeSettings(page, isMobile);

@@ -323,9 +323,20 @@ export function Menu({ anchor, items, onClose, label = 'Menu' }) {
     if (top + r.height > vh - MENU_MARGIN_PX) top = Math.max(MENU_MARGIN_PX, vh - r.height - MENU_MARGIN_PX);
     el.style.left = `${Math.round(left)}px`;
     el.style.top = `${Math.round(top)}px`;
-    const first = el.querySelector('.menu-item:not([disabled])');
-    if (first) first.focus({ preventScroll: true });
   }, [anchor, visible]);
+
+  // Focus the first item when the menu opens and whenever a submenu level is entered or left.
+  // Deliberately not tied to `visible`: the items array is rebuilt on every parent render (a
+  // sync status change, an undo), and refocusing then would throw away arrow-key navigation.
+  useLayoutEffect(() => {
+    const first = ref.current && ref.current.querySelector('.menu-item:not([disabled])');
+    if (first) first.focus({ preventScroll: true });
+  }, [path.length]);
+
+  /** Hands keyboard focus back to the button that opened the menu (its items are about to unmount). */
+  const focusAnchor = () => {
+    if (anchor && typeof anchor.focus === 'function') anchor.focus({ preventScroll: true });
+  };
 
   // Close on outside pointerdown, on scrolling elsewhere, on resize.
   useEffect(() => {
@@ -358,6 +369,9 @@ export function Menu({ anchor, items, onClose, label = 'Menu' }) {
       setPath([...path, item]);
       return;
     }
+    // Focus returns to the anchor before the action runs, so an action that focuses something
+    // itself (Rename, a new joke's title, a confirm dialog) still wins.
+    focusAnchor();
     if (item.onSelect) item.onSelect();
     onClose('select');
   };
@@ -378,11 +392,12 @@ export function Menu({ anchor, items, onClose, label = 'Menu' }) {
       case 'Escape':
         e.preventDefault();
         e.stopPropagation();
-        if (anchor && typeof anchor.focus === 'function') anchor.focus({ preventScroll: true });
+        focusAnchor();
         onClose('escape');
         break;
       case 'Tab':
         e.preventDefault();
+        focusAnchor();
         onClose('outside');
         break;
       default:

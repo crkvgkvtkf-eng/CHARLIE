@@ -33,7 +33,7 @@ export function VersionSwitcher({ ws, onNew, onManage }) {
     { label: 'Manage versions…', testid: 'version-manage', onSelect: onManage },
   ];
   return html`<span class="version-switcher-wrap">
-    <button type="button" class="version-switcher" data-testid="version-switcher" ref=${buttonRef} onClick=${() => setOpen(true)}
+    <button type="button" class="version-switcher" data-testid="version-switcher" ref=${buttonRef} onClick=${() => setOpen((isOpen) => !isOpen)}
       aria-haspopup="menu" aria-expanded=${open} title="Switch version">
       <span class="version-name">${current.name || 'Untitled'}</span>
       <${Icon} name="chevronDown" size=${14} />

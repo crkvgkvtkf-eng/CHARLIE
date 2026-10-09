@@ -1,6 +1,6 @@
 // Settings (SPEC §9.7): Pace, Sync, Data, Appearance and Help sections. Rendered inside a dialog
 // on desktop and inline as the More view on mobile; `section` scrolls a section into view.
-import { html, useState, useRef, useLayoutEffect } from '../lib.js';
+import { html, useState, useRef, useEffect, useLayoutEffect } from '../lib.js';
 import { nowIso } from '../ids.js';
 import { createWorkspace, normalize } from '../model.js';
 import { merge } from '../sync.js';
@@ -21,7 +21,9 @@ const clamp = (n, [lo, hi]) => Math.min(hi, Math.max(lo, n));
  */
 export function Settings({ ws, isMobile, section = null }) {
   const rootRef = useRef(null);
-  useLayoutEffect(() => {
+  // A passive effect, not a layout effect: on desktop the parent Dialog calls showModal() from its
+  // own layout effect, which runs after this child's, and scrolling a still-closed dialog is a no-op.
+  useEffect(() => {
     if (!section || !rootRef.current) return;
     const el = rootRef.current.querySelector(`[data-section="${section}"]`);
     if (el) el.scrollIntoView({ block: 'start' });
@@ -48,6 +50,7 @@ function Section({ id, title, children }) {
 
 /** Number input committed on every valid keystroke and clamped to its range on blur. */
 function NumberField({ id, label, testid, value, range, step = 1, unit, onCommit }) {
+  const { store } = useUi();
   const [draft, setDraft] = useDraft(String(value));
   const onInput = (e) => {
     const text = e.target.value;
@@ -60,6 +63,7 @@ function NumberField({ id, label, testid, value, range, step = 1, unit, onCommit
     const next = draft.trim() !== '' && Number.isFinite(n) ? clamp(n, range) : value;
     setDraft(String(next));
     if (next !== value) onCommit(next);
+    store.breakCoalescing(); // leaving the field ends its undo run (§8), as for every text field
   };
   return html`<div class="field">
     <label for=${id}>${label}</label>
@@ -74,7 +78,13 @@ function NumberField({ id, label, testid, value, range, step = 1, unit, onCommit
 function PaceSection({ settings }) {
   const { store } = useUi();
   const commit = (patch) => store.actions.updateSettings(patch);
-  const [target, setTarget] = useDraft(formatDuration(settings.targetSec));
+  // The target draft is NOT mirrored from the formatted store value on every change: typing "6:3"
+  // commits 363 s, which formats as "6:03" and would overwrite the keystrokes. It only resyncs when
+  // the store holds something the draft does not parse to (undo, sync, import, the blur re-format).
+  const [target, setTarget] = useState(() => formatDuration(settings.targetSec));
+  useLayoutEffect(() => {
+    if (parseDuration(target) !== settings.targetSec) setTarget(formatDuration(settings.targetSec));
+  }, [settings.targetSec]); // eslint-disable-line react-hooks/exhaustive-deps
   const onTargetInput = (e) => {
     setTarget(e.target.value);
     const sec = parseDuration(e.target.value);

@@ -132,7 +132,11 @@ export function Board({ ws, isMobile, initialTopicIndex = 0, onTopicIndexChange,
     const el = boardRef.current && boardRef.current.querySelector(`[data-testid="joke-card"][data-id="${CSS.escape(reveal.jokeId)}"]`);
     if (el) {
       if (isMobile) scrollToPage(topicIndex);
-      el.scrollIntoView({ block: 'center', inline: isMobile ? 'nearest' : 'center', behavior: isMobile ? 'instant' : 'smooth' });
+      // Centring a card taller than its column would push the head and title above the top edge;
+      // such a card is aligned to the top instead so the user lands on its title.
+      const scroller = el.closest('.col-scroll');
+      const fits = !scroller || el.offsetHeight < scroller.clientHeight;
+      el.scrollIntoView({ block: fits ? 'center' : 'start', inline: isMobile ? 'nearest' : 'center', behavior: isMobile ? 'instant' : 'smooth' });
       flash(el);
     }
     onRevealed();
@@ -214,7 +218,7 @@ function TopicPager({ topics, activeIndex, onPick }) {
   return html`<nav class="topic-pager" data-testid="topic-pager" aria-label="Topics" ref=${ref}>
     ${topics.map((topic, i) => html`<button type="button" key=${topic.id} class="pager-pill" data-testid="pager-pill" data-index=${i}
       data-color=${topic.color ?? undefined} aria-current=${i === activeIndex ? 'true' : undefined} onClick=${() => onPick(i)}>
-      ${topicLabel(topic, i)}
+      <span class="pager-label">${topicLabel(topic, i)}</span>
     </button>`)}
     <button type="button" class="pager-pill pager-add" data-testid="pager-pill" data-index=${topics.length}
       aria-current=${topics.length === activeIndex ? 'true' : undefined} aria-label="Add topic page" onClick=${() => onPick(topics.length)}>+</button>
@@ -295,7 +299,7 @@ function TopicColumn({ ws, version, topic, index, count, setPositions, dnd, isMo
       <input class="topic-title" data-testid="topic-title" type="text" placeholder="Topic" value=${title} ref=${titleRef}
         onInput=${onTitleInput} onBlur=${() => store.breakCoalescing()} onKeyDown=${onTitleKeyDown} aria-label="Topic title" />
       <span class="chip topic-chip" data-testid="topic-chip">${estimate.inSet}/${estimate.total} in set · ${formatDuration(estimate.seconds)}</span>
-      <${IconButton} icon="more" label="Topic menu" testid="topic-menu" buttonRef=${menuButtonRef} onClick=${() => setMenuOpen(true)} aria-haspopup="menu" aria-expanded=${menuOpen} />
+      <${IconButton} icon="more" label="Topic menu" testid="topic-menu" buttonRef=${menuButtonRef} onClick=${() => setMenuOpen((open) => !open)} aria-haspopup="menu" aria-expanded=${menuOpen} />
       ${menuOpen ? html`<${Menu} anchor=${menuButtonRef.current} items=${menuItems} label="Topic menu" onClose=${() => setMenuOpen(false)} />` : null}
     </header>
     <div class="col-scroll">
@@ -419,7 +423,7 @@ function JokeCard({ ws, version, topic, joke, index, count, position, dnd, isMob
 
   const radioName = `use-${joke.id}`;
   return html`<article class="joke-card ${inSet ? 'in-set' : ''}" data-card data-testid="joke-card" data-id=${joke.id} ref=${cardRef}>
-    <div class="card-head" data-card-header>
+    <div class="card-head joke-head" data-card-header>
       <div class="card-meta">
         <button type="button" class="grip" data-testid="joke-grip" aria-label="Drag to reorder joke" ref=${gripRef}><${Icon} name="grip" size=${18} /></button>
         <label class="pill inset-pill ${inSet ? 'on' : ''}">
@@ -429,7 +433,7 @@ function JokeCard({ ws, version, topic, joke, index, count, position, dnd, isMob
         ${inSet ? html`<span class="badge" data-testid="joke-badge" title="Position in set">#${position}</span>` : null}
         <span class="spacer"></span>
         <${TimeChip} seconds=${seconds} words=${words} overridden=${overridden} testid="joke-time" />
-        <${IconButton} icon="more" label="Joke menu" testid="joke-menu" buttonRef=${menuButtonRef} onClick=${() => setMenuOpen(true)} aria-haspopup="menu" aria-expanded=${menuOpen} />
+        <${IconButton} icon="more" label="Joke menu" testid="joke-menu" buttonRef=${menuButtonRef} onClick=${() => setMenuOpen((open) => !open)} aria-haspopup="menu" aria-expanded=${menuOpen} />
         ${menuOpen ? html`<${Menu} anchor=${menuButtonRef.current} items=${menuItems} label="Joke menu" onClose=${() => setMenuOpen(false)} />` : null}
       </div>
       <input class="joke-title" data-testid="joke-title" type="text" placeholder="Joke title" value=${title} ref=${titleRef}
@@ -504,7 +508,7 @@ function AltCard({ topic, joke, alt, index, count, radioName, dnd }) {
         <span>Use this in set</span>
       </label>
       <span class="chip alt-chip">${countWords(alt.text)}w</span>
-      <${IconButton} icon="more" label="Alt menu" testid="alt-menu" size=${18} buttonRef=${menuButtonRef} onClick=${() => setMenuOpen(true)} aria-haspopup="menu" aria-expanded=${menuOpen} />
+      <${IconButton} icon="more" label="Alt menu" testid="alt-menu" size=${18} buttonRef=${menuButtonRef} onClick=${() => setMenuOpen((open) => !open)} aria-haspopup="menu" aria-expanded=${menuOpen} />
       ${menuOpen ? html`<${Menu} anchor=${menuButtonRef.current} items=${menuItems} label="Alt menu" onClose=${() => setMenuOpen(false)} />` : null}
     </div>
     <${AutoTextarea} class="alt-text" wrapClass="alt-text-wrap" value=${text} textareaRef=${textRef} data-testid="alt-text"

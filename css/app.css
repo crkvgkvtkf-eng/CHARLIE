@@ -585,7 +585,7 @@ body.is-dragging .grip { cursor: grabbing; }
   padding: 7px 4px 2px 9px;
   min-height: 42px;
 }
-.joke-card > .card-head {
+.joke-head { /* also matches the drag ghost's clone (not a .joke-card child there) */
   display: grid;
   gap: 0;
   padding: 6px 9px 0;
@@ -778,10 +778,9 @@ body.is-dragging .grip { cursor: grabbing; }
   color: var(--text);
   font-size: 13px;
   font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
+.pager-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .pager-pill[data-color]::before {
   content: "";
   width: 8px;
@@ -1270,13 +1269,38 @@ dialog.dialog-versions { width: min(600px, calc(100vw - 32px)); }
   }
   .add-topic { min-height: 48px; padding: 12px 22px; font-size: 16px; }
 
-  /* 44 px touch targets without growing the rows: padding + negative margins */
+  /* 44 px touch targets (§9.9) without growing the rows. Grips, icon buttons and the sync dot are
+     transparent, so they simply grow and negative margins keep their rows the same height. Pills,
+     toggles, "+" buttons, pager pills and the sheet "Done" button keep their compact look and extend
+     their tappable box with an invisible ::after instead: for hit testing a pseudo-element is its
+     element, so a tap on it activates the label or button exactly like a tap on the visible part. */
+  .grip, .icon-btn { position: relative; } /* win hit-testing over the in-flow neighbours they overlap */
   .grip { width: 44px; height: 44px; margin: -8px -9px; }
   .card-meta .grip { margin-left: -14px; }
   .alt-card .grip { margin: -8px -9px -8px -12px; }
-  .icon-btn { width: 40px; height: 40px; }
+  .icon-btn, .sync-dot { width: 44px; height: 44px; }
+  .topic-card .icon-btn { margin-block: -2px; }
+  .card-meta .icon-btn { margin-block: -5px; }
+  .alt-card .icon-btn { margin-block: -4px; }
+  .set-remove { margin-block: -7px; }
+  .toast-close { margin-block: -7px; }
+  .version-switcher { min-height: 44px; }
+  .pill, .alts-toggle, .add-btn, .pager-pill, .dialog-head .btn-small { position: relative; }
+  .pill::after, .alts-toggle::after, .add-btn::after, .pager-pill::after, .dialog-head .btn-small::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 44px;
+    transform: translateY(-50%);
+  }
   .pill { min-height: 32px; }
   .pill input { width: 18px; height: 18px; }
+  .collapsed-note { min-height: 44px; }
+  .settings .btn, .version-actions .btn { min-height: 44px; }
+  .menu { max-width: calc(100vw - 16px); }
+  .swatch-item { width: 44px; min-height: 44px; }
   .card-head { gap: 4px; }
   .joke-title { font-size: 17px; }
   .grow { font-size: 16px; }
@@ -1288,7 +1312,6 @@ dialog.dialog-versions { width: min(600px, calc(100vw - 32px)); }
   .add-alt-row { height: 36px; }
   .alts::before { bottom: 18px; }
   .time-chip { font-size: 12px; }
-  .set-remove, .alt-card .icon-btn { width: 40px; height: 40px; }
 
   .set-panel { width: 100%; flex: 1; border-left: 0; min-height: 0; }
   .set-head { padding-top: 14px; }
@@ -1311,7 +1334,7 @@ dialog.dialog-versions { width: min(600px, calc(100vw - 32px)); }
   .dialog-actions .btn { min-height: 44px; flex: 1; }
   .version-row { flex-wrap: wrap; }
   .version-actions { width: 100%; }
-  .version-actions .btn { flex: 1; min-height: 40px; }
+  .version-actions .btn { flex: 1; }
   .menu-item { min-height: 44px; }
 }
 

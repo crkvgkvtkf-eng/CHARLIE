@@ -142,5 +142,12 @@ test('the sync dot opens Settings › Sync', async ({ browser, contextOptions, i
   await expect(a.page.getByTestId('settings')).toBeVisible();
   await expect(a.page.getByTestId('token-input')).toBeInViewport();
   if (isMobile) await expect(a.page.getByTestId('tab-more')).toHaveAttribute('aria-current', 'page');
+  else {
+    // The dialog is scrolled so the Sync section starts at its top (not merely visible because the dialog is tall).
+    await expect.poll(() => a.page.evaluate(() => {
+      const dialog = document.querySelector('dialog.dialog-settings');
+      return dialog.querySelector('[data-section="sync"]').getBoundingClientRect().top - dialog.getBoundingClientRect().top;
+    })).toBeLessThan(40);
+  }
   await a.context.close();
 });

@@ -13,8 +13,9 @@
 //   - `document.body.is-dragging`, source card `.is-dragging`, and the board (`[data-drop="topics"]`)
 //     `.is-dragging-board` (the mobile stylesheet uses it to turn scroll snapping off).
 //   - A `position: fixed; pointer-events: none` ghost (`.dnd-ghost`) shows only the card's header row:
-//     the element marked `[data-card-header]` inside the card, else the card's first element child,
-//     else the card itself. Clone ids/test ids are stripped so queries never see duplicates.
+//     the element marked `[data-card-header]` (the card itself when the whole card is the header, as a
+//     set row is, else one inside it), else the card's first element child, else the card itself. Clone
+//     ids/test ids are stripped so queries never see duplicates.
 //   - The drop target is `document.elementFromPoint(x, y)` → closest `[data-drop="<kind's container>"]`.
 //     The insertion index compares the pointer to the midpoints of the container's direct children
 //     that carry `[data-card]`, excluding the dragged card (vertical for lists, horizontal for topics),
@@ -28,7 +29,9 @@
 //     way only when it carries `data-dnd-hscroll="1"` (the desktop layout sets it).
 //   - Paging (mobile): when the board carries `data-dnd-page="1"`, holding the pointer within 40 px of
 //     the board's left/right edge for 500 ms calls `onPage('left'|'right')` once per dwell (the pointer
-//     must leave the edge zone before another page can fire).
+//     must leave the edge zone before another page can fire). A zone the pointer is already in when the
+//     drag starts is never armed: joke grips sit inside the left zone, so merely holding a grip must not
+//     page the board and drop the card into the neighbouring topic.
 //   - `pointercancel`, Escape, window `blur` and `visibilitychange→hidden` cancel the drag without a drop.
 
 /** Drag kind → value of the `data-drop` attribute on the container that accepts it. */
@@ -88,9 +91,15 @@ function edgeStep(p, lo, hi) {
   return 0;
 }
 
+/** The header row of a card: the card itself when it is marked as one (set rows), else the marked descendant. */
+function headerOf(cardEl) {
+  if (cardEl.matches('[data-card-header]')) return cardEl;
+  return cardEl.querySelector('[data-card-header]') || cardEl.firstElementChild || cardEl;
+}
+
 /** Builds the fixed ghost element from the card's header row. */
 function makeGhost(cardEl, doc) {
-  const source = cardEl.querySelector('[data-card-header]') || cardEl.firstElementChild || cardEl;
+  const source = headerOf(cardEl);
   const clone = source.cloneNode(true);
   // Form controls carry their text in the `value` property, which cloneNode does not copy.
   const sourceFields = source.querySelectorAll('input, textarea');
@@ -312,7 +321,9 @@ export function createDnd({ onDrop, onStateChange = () => {}, onPage = () => {} 
     if (g.board) g.board.classList.add('is-dragging-board');
     moveGhost();
     updateTarget();
-    updateDwell();
+    // Seed, do not arm: the zone under the pointer at the start of the drag only becomes
+    // pageable after the pointer has left it once (see the header comment on paging).
+    g.dwellZone = dwellZoneAt(g);
     onStateChange({ dragging: true, kind: g.kind });
     if (typeof g.win.requestAnimationFrame === 'function') g.raf = g.win.requestAnimationFrame(frame);
   }
@@ -338,15 +349,19 @@ export function createDnd({ onDrop, onStateChange = () => {}, onPage = () => {} 
     layoutIndicator(g.indicator, containerEl, index, geometry);
   }
 
+  /** The paging edge zone ('left' | 'right' | null) the pointer is in, when the board pages at all. */
+  function dwellZoneAt(g) {
+    if (!g.board || g.board.getAttribute('data-dnd-page') !== '1') return null;
+    const r = g.board.getBoundingClientRect();
+    if (g.x <= r.left + EDGE_PX) return 'left';
+    if (g.x >= r.right - EDGE_PX) return 'right';
+    return null;
+  }
+
   /** Edge-dwell paging on the mobile board: one onPage() per uninterrupted stay in an edge zone. */
   function updateDwell() {
     const g = gesture;
-    let zone = null;
-    if (g.board && g.board.getAttribute('data-dnd-page') === '1') {
-      const r = g.board.getBoundingClientRect();
-      if (g.x <= r.left + EDGE_PX) zone = 'left';
-      else if (g.x >= r.right - EDGE_PX) zone = 'right';
-    }
+    const zone = dwellZoneAt(g);
     if (zone === g.dwellZone) return;
     clearTimeout(g.dwellTimer);
     g.dwellTimer = null;

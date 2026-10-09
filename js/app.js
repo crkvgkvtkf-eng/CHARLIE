@@ -6,7 +6,7 @@ import { downloadJson, loadWorkspace, saveWorkspace, serializeExport, SYNC_KEY }
 import { createStore } from './store.js';
 import { createSyncManager } from './syncManager.js';
 import { App } from './ui/App.js';
-import { createFocusRequests, createToaster, isTextField } from './ui/common.js';
+import { MOBILE_QUERY, createFocusRequests, createToaster, isTextField } from './ui/common.js';
 
 const SAVE_TOAST_INTERVAL_MS = 60_000;
 const SW_UPDATE_INTERVAL_MS = 60 * 60 * 1000;
@@ -36,13 +36,21 @@ function saveSyncConfig(cfg) {
 // Theme and column width
 
 const darkQuery = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null;
+const mobileQuery = typeof matchMedia === 'function' ? matchMedia(MOBILE_QUERY) : null;
 
-/** Applies settings that live on the document: resolved theme and the board column width. */
+/**
+ * Applies settings that live on the document: resolved theme, the board column width and the
+ * `theme-color` meta, which must match the top bar (§9.1) and therefore follows the theme's
+ * `--topbar` token instead of repeating its value here.
+ */
 function applySettings(settings) {
   const root = document.documentElement;
   const theme = settings.theme === 'system' ? (darkQuery && darkQuery.matches ? 'dark' : 'light') : settings.theme;
   root.dataset.theme = theme;
   root.style.setProperty('--col-w', `${settings.colWidth}px`);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  const topbar = getComputedStyle(root).getPropertyValue('--topbar').trim();
+  if (meta && topbar) meta.content = topbar;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,10 +62,19 @@ function setupViewport() {
   const update = () => {
     const height = vv ? vv.height : window.innerHeight;
     const inset = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
+    const keyboardOpen = inset > KEYBOARD_OPEN_PX;
     root.style.setProperty('--vvh', `${Math.round(height)}px`);
     root.style.setProperty('--kb-inset', `${Math.round(inset)}px`);
-    root.classList.toggle('kb-open', inset > KEYBOARD_OPEN_PX);
+    root.classList.toggle('kb-open', keyboardOpen);
     if (vv && vv.offsetTop > 0) window.scrollTo(0, 0);
+    // The app just shrank to the visual viewport and the browser's own reveal pan was cancelled
+    // above, so bring the field being edited back into view inside its own scroller (the column
+    // or the More page); the window itself never scrolls. Re-run on every resize while the
+    // keyboard is open because iOS reports the final keyboard height over several events.
+    const active = document.activeElement;
+    if (keyboardOpen && mobileQuery && mobileQuery.matches && isTextField(active)) {
+      active.scrollIntoView({ block: 'center', behavior: 'instant' });
+    }
   };
   if (vv) {
     vv.addEventListener('resize', update);
