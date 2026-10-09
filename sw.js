@@ -12,6 +12,8 @@ const PRECACHE = [
   './js/model.js',
   './js/storage.js',
   './js/sync.js',
+  './js/syncManager.js',
+  './js/store.js',
   './js/timing.js',
   './js/ui/dnd.js',
   './js/undo.js',
