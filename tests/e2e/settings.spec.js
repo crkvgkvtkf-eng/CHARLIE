@@ -3,7 +3,7 @@
 import { test, expect } from '@playwright/test';
 import { formatDuration } from '../../js/timing.js';
 import {
-  buildWorkspace, chipText, closeSettings, jokeCard, open, openSettings, readStored, secondsFor, seed, showSet, words,
+  answerDialog, buildWorkspace, chipText, closeSettings, confirmDialog, jokeCard, open, openSettings, readStored, secondsFor, seed, showSet, words,
 } from './helpers.js';
 
 const TEXT = words(70); // 70 words: 30 s at 140 wpm, 60 s at 70 wpm
@@ -173,4 +173,32 @@ test('a toast raised while the Settings dialog is open is visible above it and c
   await closeSettings(page, isMobile);
   await expect(page.getByTestId('toast')).toHaveCount(1);
   await expect(page.getByTestId('toast')).toBeVisible();
+});
+
+test('a press inside a dialog released over the backdrop (selecting text) does not close it', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'selecting text by dragging the mouse is a desktop gesture');
+  const { ws } = oneJokeInSet();
+  await seed(page, ws);
+  await open(page);
+  const settings = await openSettings(page, false);
+  const dragOut = async (from) => {
+    await page.mouse.move(from.x + 20, from.y + 8);
+    await page.mouse.down();
+    await page.mouse.move(40, 450, { steps: 5 }); // the dark backdrop, left of the dialog
+    await page.mouse.up();
+  };
+  await dragOut(await settings.locator('.hint').first().boundingBox());
+  await expect(settings).toBeVisible();
+
+  // Same for a confirm: it stays open and still answers.
+  await settings.getByTestId('reset-button').click();
+  const confirm = confirmDialog(page);
+  await dragOut(await confirm.locator('.dialog-message').boundingBox());
+  await expect(confirm).toBeVisible();
+  await answerDialog(page, { confirm: false });
+  await expect(settings).toBeVisible();
+
+  // A plain click on the backdrop still closes the dialog.
+  await page.mouse.click(40, 450);
+  await expect(settings).toHaveCount(0);
 });

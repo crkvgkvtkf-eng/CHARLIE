@@ -1,7 +1,7 @@
 // Versions (SPEC §9.6): the top-bar switcher, the New version dialog (copy / blank), switching,
 // and the Manage dialog (rename inline, duplicate, delete with confirm, refused for the only version).
 import { test, expect } from '@playwright/test';
-import { answerDialog, open, readStored, sampleWorkspace, seed, showSet } from './helpers.js';
+import { answerDialog, confirmDialog, open, readStored, sampleWorkspace, seed, showSet } from './helpers.js';
 
 async function openSwitcher(page) {
   await page.getByTestId('version-switcher').click();
@@ -72,7 +72,13 @@ test('switching through the menu shows the chosen version and marks it', async (
   const menu = await openSwitcher(page);
   const items = menu.getByTestId('version-item');
   await expect(items).toHaveCount(2);
+  // The versions are a set of choices: radio items, so the checked state is announced.
+  await expect(items.nth(0)).toHaveAttribute('role', 'menuitemradio');
+  await expect(items.nth(1)).toHaveAttribute('role', 'menuitemradio');
+  await expect(items.nth(0)).toHaveAttribute('aria-checked', 'false');
   await expect(items.nth(1)).toHaveAttribute('aria-checked', 'true');
+  await expect(menu.getByTestId('version-new')).toHaveAttribute('role', 'menuitem');
+  expect(await menu.getByTestId('version-new').getAttribute('aria-checked')).toBeNull();
   await items.nth(0).click();
   await expect(page.getByTestId('version-switcher')).toHaveText(/Set v1/);
   await expect(page.locator(`[data-testid="topic-card"][data-id="${ids.airports}"]`)).toBeVisible();
@@ -128,6 +134,27 @@ test('manage dialog: rename inline, duplicate, delete with confirm; the only ver
   await page.keyboard.press('Escape');
   await page.getByTestId('undo').click();
   await expect(page.getByTestId('version-switcher')).toHaveText(/Open mic copy/);
+});
+
+test('deleting a version from the keyboard keeps focus inside the manage dialog', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'keyboard focus');
+  const { ws } = sampleWorkspace();
+  await seed(page, ws);
+  await open(page);
+  const dialog = await openManage(page);
+  await dialog.getByTestId('version-new-blank').click();
+  await dialog.getByTestId('version-new-blank').click();
+  const rows = dialog.getByTestId('version-row');
+  await expect(rows).toHaveCount(3);
+  await rows.nth(2).getByTestId('version-delete').focus();
+  await page.keyboard.press('Enter');
+  await expect(confirmDialog(page)).toBeVisible();
+  await page.keyboard.press('Enter'); // Delete is the focused default button
+  await expect(rows).toHaveCount(2);
+  // The row (and its Delete button) is gone; focus must not fall out of the still-open dialog onto <body>.
+  expect(await dialog.evaluate((el) => el.contains(document.activeElement) && document.activeElement !== document.body)).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
 });
 
 test('the mobile More view opens the manage dialog', async ({ page, isMobile }) => {

@@ -1,10 +1,11 @@
 // The Set (SPEC §9.5): the ordered list of jokes in the active version's set with reorder grips,
-// per-joke times, remove buttons and the footer totals (total, words, target, delta, progress).
-// Desktop renders it as a collapsible right sidebar, mobile as the content of the Set tab.
-import { html, useRef, useMemo, useEffect, useLayoutEffect } from '../lib.js';
+// a per-row ⋯ menu (Move up / Move down / Remove — the keyboard and accessibility fallback for the
+// drag, SPEC §9.4), per-joke times, remove buttons and the footer totals (total, words, target,
+// delta, progress). Desktop renders it as a collapsible right sidebar, mobile as the Set tab.
+import { html, useRef, useMemo, useState, useEffect, useLayoutEffect } from '../lib.js';
 import { setEstimate, formatDuration, formatDelta } from '../timing.js';
 import { createDnd } from './dnd.js';
-import { Icon, IconButton, plural, useUi } from './common.js';
+import { Icon, IconButton, Menu, plural, useUi } from './common.js';
 
 const ON_TARGET_SEC = 5;
 
@@ -62,7 +63,7 @@ export function SetPanel({ ws, isMobile, collapsed = false, onToggleCollapsed, o
     <div class="set-list" data-drop="set">
       ${estimate.items.length === 0
         ? html`<p class="set-empty">Tick 'In set' on a joke to build your set.</p>`
-        : estimate.items.map((item, i) => html`<${SetRow} key=${item.jokeId} item=${item} position=${i + 1} dnd=${dnd}
+        : estimate.items.map((item, i) => html`<${SetRow} key=${item.jokeId} item=${item} position=${i + 1} count=${estimate.items.length} dnd=${dnd}
             onReveal=${() => onReveal(item.jokeId)} onRemove=${() => store.actions.removeFromSet(item.jokeId)} />`)}
     </div>
     <footer class="set-foot">
@@ -85,14 +86,35 @@ export function SetPanel({ ws, isMobile, collapsed = false, onToggleCollapsed, o
   </aside>`;
 }
 
-function SetRow({ item, position, dnd, onReveal, onRemove }) {
+/** One set row; `position` is 1-based, `count` the number of rows. */
+function SetRow({ item, position, count, dnd, onReveal, onRemove }) {
+  const { store, focus } = useUi();
   const rowRef = useRef(null);
   const gripRef = useRef(null);
+  const menuButtonRef = useRef(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   useLayoutEffect(() => {
     const grip = gripRef.current;
     dnd.attach(grip, { kind: 'set', id: item.jokeId, cardEl: rowRef.current });
     return () => dnd.detach(grip);
   }, [dnd, item.jokeId]);
+  // Move up / Move down re-insert this row's DOM node among its siblings, which can drop keyboard
+  // focus; the request made before the move puts it back on the ⋯ button once the row has settled.
+  useLayoutEffect(() => {
+    if (focus.take(item.jokeId, 'set-menu')) menuButtonRef.current.focus({ preventScroll: true });
+  }, [position]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // moveInSet takes the index in the list AFTER this row was removed from it (SPEC §3).
+  const move = (toIndex) => {
+    focus.request(item.jokeId, 'set-menu');
+    store.actions.moveInSet(item.jokeId, toIndex);
+  };
+  const menuItems = [
+    { label: 'Move up', action: 'move-up', disabled: position === 1, onSelect: () => move(position - 2) },
+    { label: 'Move down', action: 'move-down', disabled: position === count, onSelect: () => move(position) },
+    { divider: true },
+    { label: 'Remove from set', action: 'remove', danger: true, onSelect: onRemove },
+  ];
 
   return html`<div class="set-item" data-card data-card-header data-testid="set-item" data-id=${item.jokeId} ref=${rowRef}>
     <span class="set-pos">${position}</span>
@@ -102,6 +124,9 @@ function SetRow({ item, position, dnd, onReveal, onRemove }) {
       ${item.topicTitle ? html`<span class="set-topic">${item.topicTitle}</span>` : null}
     </button>
     <span class="set-time ${item.overridden ? 'overridden' : ''}" data-testid="set-time" title=${item.overridden ? 'Manual time' : undefined}>${formatDuration(item.seconds)}</span>
+    <${IconButton} icon="more" label="Set item menu" testid="set-menu" size=${16} class="set-menu" buttonRef=${menuButtonRef}
+      onClick=${() => setMenuOpen((open) => !open)} aria-haspopup="menu" aria-expanded=${menuOpen} />
+    ${menuOpen ? html`<${Menu} anchor=${menuButtonRef.current} items=${menuItems} label="Set item menu" onClose=${() => setMenuOpen(false)} />` : null}
     <${IconButton} icon="close" label="Remove from set" testid="set-remove" size=${16} class="set-remove" onClick=${onRemove} />
   </div>`;
 }

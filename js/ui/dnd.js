@@ -155,9 +155,11 @@ function makeIndicator(doc) {
 
 /**
  * Places the indicator over the gap at `index` inside `containerEl`. The indicator is fixed-position
- * and so not clipped like the cards are; a gap that lies outside the container's scroller (during
- * auto-scroll the pointer sits at the scroller's edge and the gap may be just past it) is hidden
- * rather than painted over whatever is next to the list.
+ * and so not clipped like the cards are. A gap that lies outside the container's scroller (the gap
+ * above a first card whose top is scrolled away, or past the last card while auto-scrolling at the
+ * edge) is still a valid, imminent drop, so the line is clamped to the scroller's edge — slightly
+ * faded, as a hint that the slot is just past it — instead of painted over whatever is next to the
+ * list or hidden. Only when the list itself is out of view is the indicator hidden.
  */
 function layoutIndicator(indicator, containerEl, index, { horizontal, excludeEl }) {
   const cards = cardsOf(containerEl, excludeEl);
@@ -180,10 +182,15 @@ function layoutIndicator(indicator, containerEl, index, { horizontal, excludeEl 
     pos = horizontal ? (a.right + b.left) / 2 : (a.bottom + b.top) / 2;
   }
   const [clipStart, clipEnd] = horizontal ? [clip.left, clip.right] : [clip.top, clip.bottom];
-  if (pos < clipStart || pos > clipEnd) {
+  const [boxStart, boxEnd] = horizontal ? [box.left, box.right] : [box.top, box.bottom];
+  if (boxEnd < clipStart || boxStart > clipEnd) {
     indicator.style.display = 'none';
     return;
   }
+  const inClip = Math.min(Math.max(pos, clipStart + thickness), clipEnd - thickness);
+  indicator.style.opacity = inClip === pos ? '1' : '0.55';
+  indicator.setAttribute('data-clamped', inClip === pos ? 'false' : 'true');
+  pos = inClip;
   indicator.setAttribute('data-orientation', horizontal ? 'vertical' : 'horizontal');
   if (horizontal) {
     Object.assign(indicator.style, {

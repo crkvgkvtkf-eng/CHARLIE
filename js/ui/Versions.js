@@ -45,6 +45,7 @@ export function VersionSwitcher({ ws, onNew, onManage }) {
 /** The Manage versions dialog. */
 export function ManageVersionsDialog({ ws, onClose }) {
   const { store, confirm } = useUi();
+  const doneRef = useRef(null);
   const only = ws.versions.length === 1;
 
   const deleteVersion = async (v) => {
@@ -55,13 +56,17 @@ export function ManageVersionsDialog({ ws, onClose }) {
       confirmLabel: 'Delete',
       danger: true,
     });
-    if (ok) store.actions.deleteVersion(v.id);
+    if (!ok) return;
+    // The confirm handed focus back to the row's Delete button, which is about to unmount with its
+    // row; focus would fall out of this (still open) dialog onto <body>. Done is the stable landing.
+    if (doneRef.current) doneRef.current.focus({ preventScroll: true });
+    store.actions.deleteVersion(v.id);
   };
 
   return html`<${Dialog} onClose=${onClose} label="Manage versions" testid="version-dialog" class="dialog-versions">
     <div class="dialog-head">
       <h2 class="dialog-title">Versions</h2>
-      <button type="button" class="btn btn-small" onClick=${onClose} autofocus>Done</button>
+      <button type="button" class="btn btn-small" onClick=${onClose} autofocus ref=${doneRef}>Done</button>
     </div>
     <ul class="version-list">
       ${ws.versions.map((v) => html`<${VersionRow} key=${v.id} version=${v} active=${v.id === ws.activeVersionId} only=${only}

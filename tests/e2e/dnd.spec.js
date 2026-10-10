@@ -263,6 +263,41 @@ test.describe('iphone only', () => {
     await expect(page.locator('body')).not.toHaveClass(/is-dragging/);
   });
 
+  test('dropping above a first card whose top is scrolled away shows the indicator clamped to the column edge', async ({ page }) => {
+    // A long first joke, scrolled so its top is clipped but its midpoint is still in view: the gap
+    // above it is a valid drop (index 0), and the line used to disappear instead of marking it.
+    const { ws, ids } = buildWorkspace((w, m) => {
+      const parents = m.addTopic(w, { title: 'Parents' });
+      const first = m.addJoke(w, parents, { title: 'First', text: words(120, 'a') });
+      const second = m.addJoke(w, parents, { title: 'Second', text: words(20, 'b') });
+      return { parents, first, second };
+    });
+    await seed(page, ws);
+    await open(page);
+    await jokeCard(page, ids.first).evaluate((card) => {
+      const scroller = card.closest('.col-scroll');
+      const c = card.getBoundingClientRect();
+      const s = scroller.getBoundingClientRect();
+      scroller.scrollTop = c.top + c.height / 2 - s.top - 100; // midpoint 100 px below the column's top
+    });
+    const scroller = await page.locator('.col-scroll').first().boundingBox();
+    expect((await jokeCard(page, ids.first).boundingBox()).y).toBeLessThan(scroller.y);
+    const at = { x: scroller.x + 150, y: scroller.y + 60 }; // above the midpoint, outside the 40 px auto-scroll zone
+    await beginDrag(page, true, jokeCard(page, ids.second).getByTestId('joke-grip'), at);
+    const geometry = await page.evaluate(() => {
+      const indicator = document.querySelector('.dnd-indicator');
+      const r = indicator.getBoundingClientRect();
+      const s = document.querySelector('.col-scroll').getBoundingClientRect();
+      return { shown: indicator.style.display !== 'none', clamped: indicator.dataset.clamped, top: r.top, scrollerTop: s.top };
+    });
+    expect(geometry.shown, JSON.stringify(geometry)).toBe(true);
+    expect(geometry.clamped).toBe('true');
+    expect(geometry.top).toBeGreaterThanOrEqual(geometry.scrollerTop - 1);
+    expect(geometry.top).toBeLessThan(geometry.scrollerTop + 8);
+    await endDrag(page, true, at);
+    expect(await jokeIdsOn(topicCard(page, ids.parents))).toEqual([ids.second, ids.first]);
+  });
+
   test('holding near the board edge pages to the next topic and drops there', async ({ page }) => {
     const { ws, ids } = sampleWorkspace();
     await seed(page, ws);

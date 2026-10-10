@@ -113,22 +113,25 @@ test('the install nudge appears for a browser tab with jokes and stays dismissed
 });
 
 /**
- * The real tappable height of a control: how many points on its vertical centre line hit-test to
- * it (pseudo-elements that extend the hit area count, as a finger does not care about boxes).
+ * The real tappable extent of a control along `axis`: how many points on its centre line hit-test
+ * to it (pseudo-elements that extend the hit area count, as a finger does not care about boxes;
+ * a neighbour painting over it does not count, for the same reason).
  */
-async function tapHeight(locator) {
+async function tapExtent(locator, axis = 'y') {
   await locator.scrollIntoViewIfNeeded();
-  return locator.evaluate((el) => {
+  return locator.evaluate((el, along) => {
     const b = el.getBoundingClientRect();
-    const x = b.left + b.width / 2;
+    const [lo, hi, fixed] = along === 'y' ? [b.top, b.bottom, b.left + b.width / 2] : [b.left, b.right, b.top + b.height / 2];
     let hits = 0;
-    for (let y = Math.floor(b.top) - 30; y <= Math.ceil(b.bottom) + 30; y++) {
-      const hit = document.elementFromPoint(x, y);
+    for (let p = Math.floor(lo) - 30; p <= Math.ceil(hi) + 30; p++) {
+      const hit = along === 'y' ? document.elementFromPoint(fixed, p) : document.elementFromPoint(p, fixed);
       if (hit && el.contains(hit)) hits++;
     }
     return hits;
-  });
+  }, axis);
 }
+const tapHeight = (locator) => tapExtent(locator, 'y');
+const tapWidth = (locator) => tapExtent(locator, 'x');
 
 test('touch targets: grips, tabs, menu items, pills, toggles, pager, "+" buttons and icon buttons are at least 44 px tall', async ({ page }) => {
   const { ws, ids } = sampleWorkspace();
@@ -170,6 +173,11 @@ test('touch targets: grips, tabs, menu items, pills, toggles, pager, "+" buttons
   });
   expect(await hitAtTop(apps.getByTestId('alt-card').first().getByTestId('alt-text')), 'alt textarea top rows').toEqual([true, true, true]);
   expect(await hitAtTop(apps.getByTestId('joke-title')), 'joke title top rows').toEqual([true, true, true]);
+  // Widths: the grip keeps its whole box (the neighbouring pill's extender must not paint over its
+  // right edge) and the pager's "+" page pill is as wide as it is tall.
+  expect(await tapWidth(apps.getByTestId('joke-grip')), 'joke grip width').toBeGreaterThanOrEqual(44);
+  expect(await tapWidth(apps.getByTestId('alt-grip').first()), 'alt grip width').toBeGreaterThanOrEqual(44);
+  expect(await tapWidth(page.getByTestId('pager-pill').last()), '+ page pill width').toBeGreaterThanOrEqual(44);
 
   await apps.getByTestId('joke-menu').click();
   const item = await page.getByTestId('menu').locator('[data-action="add-alt"]').boundingBox();
@@ -178,13 +186,93 @@ test('touch targets: grips, tabs, menu items, pills, toggles, pager, "+" buttons
 
   await page.getByTestId('tab-set').click();
   expect(await tapHeight(page.getByTestId('set-remove').first()), 'set remove').toBeGreaterThanOrEqual(44);
+  expect(await tapHeight(page.getByTestId('set-menu').first()), 'set menu').toBeGreaterThanOrEqual(44);
   expect(await tapHeight(page.getByTestId('set-title').first()), 'set title').toBeGreaterThanOrEqual(44);
+
+  // Every input and select of the More view.
+  await page.getByTestId('tab-more').click();
+  for (const testid of ['wpm-input', 'pause-input', 'target-input', 'token-input', 'theme-select', 'colwidth-select']) {
+    expect(await tapHeight(page.getByTestId(testid)), testid).toBeGreaterThanOrEqual(44);
+  }
 
   // The version name in Manage versions switches versions: it needs the same height.
   await page.getByTestId('version-switcher').click();
   await page.getByTestId('menu').getByTestId('version-manage').click();
   await page.getByTestId('version-dialog').getByTestId('version-new-blank').click();
   expect(await tapHeight(page.locator('.version-pick:not(:disabled)').first()), 'version pick').toBeGreaterThanOrEqual(44);
+});
+
+test('the action button of a toast is a 44 px target', async ({ page }) => {
+  const { ws, ids } = sampleWorkspace();
+  await seed(page, ws);
+  await open(page);
+  // A failing save raises the persistent "export your data" toast, whose action is the smallest one.
+  await page.evaluate((key) => {
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (k, v) {
+      if (k === key) throw new Error('QuotaExceededError (simulated)');
+      return setItem.call(this, k, v);
+    };
+  }, 'ssb.workspace.v1');
+  await jokeCard(page, ids.luggage).getByTestId('joke-inset').check();
+  const action = page.getByTestId('toast-action');
+  await expect(action).toHaveText('Export');
+  expect(await tapHeight(action), 'toast action').toBeGreaterThanOrEqual(44);
+});
+
+test('tapping a pager pill several pages away moves the highlight straight there', async ({ page }) => {
+  const { ws } = buildWorkspace((w, m) => {
+    for (let i = 1; i <= 5; i++) m.addJoke(w, m.addTopic(w, { title: `Topic ${i}` }), { title: `J${i}`, text: words(10) });
+  });
+  await seed(page, ws);
+  await open(page);
+  // Record every change of the highlighted pill: the smooth scroll passes pages 1–3 on its way and
+  // the pager must not follow those (it used to read [4, 0, 1, 2, 3, 4]).
+  await page.getByTestId('topic-pager').evaluate((pager) => {
+    window.__pillSequence = [];
+    new MutationObserver(() => {
+      const pills = Array.from(pager.querySelectorAll('[data-testid="pager-pill"]'));
+      const i = pills.findIndex((p) => p.getAttribute('aria-current') === 'true');
+      const seq = window.__pillSequence;
+      if (seq[seq.length - 1] !== i) seq.push(i);
+    }).observe(pager, { attributes: true, subtree: true, attributeFilter: ['aria-current'] });
+  });
+  await page.getByTestId('pager-pill').nth(4).click();
+  const board = page.locator('.board');
+  await expect.poll(() => board.evaluate((el) => Math.round(el.scrollLeft / el.clientWidth))).toBe(4);
+  await page.waitForTimeout(300); // any late scroll events
+  expect(await page.evaluate(() => window.__pillSequence)).toEqual([4]);
+  // Once there, a swipe is followed again.
+  await board.evaluate((el) => el.scrollTo({ left: 0, behavior: 'instant' }));
+  await expect(page.getByTestId('pager-pill').nth(0)).toHaveAttribute('aria-current', 'true');
+});
+
+test('a phone turned to landscape keeps the mobile layout and its touch targets', async ({ page }) => {
+  const { ws, ids } = sampleWorkspace();
+  await seed(page, ws);
+  await page.setViewportSize({ width: 844, height: 390 }); // iPhone 14 on its side: wider than the breakpoint
+  await open(page);
+  await expect(page.getByTestId('app')).toHaveClass(/is-mobile/);
+  await expect(page.getByTestId('tab-board')).toBeVisible();
+  await expect(page.getByTestId('settings-button')).toHaveCount(0);
+  await expect(topicCard(page, ids.airports).getByTestId('topic-grip')).toBeHidden();
+  for (const [name, locator] of Object.entries({
+    'joke grip': jokeCard(page, ids.security).getByTestId('joke-grip'),
+    'joke menu': jokeCard(page, ids.security).getByTestId('joke-menu'),
+    'topic menu': topicCard(page, ids.airports).getByTestId('topic-menu'),
+  })) {
+    const box = await locator.boundingBox();
+    expect(box.width, name).toBeGreaterThanOrEqual(44);
+    expect(box.height, name).toBeGreaterThanOrEqual(44);
+  }
+  await jokeCard(page, ids.security).getByTestId('joke-menu').click();
+  const item = await page.getByTestId('menu').locator('[data-action="add-alt"]').boundingBox();
+  expect(item.height).toBeGreaterThanOrEqual(44);
+  await page.keyboard.press('Escape');
+  // Back to portrait, live.
+  await page.setViewportSize({ width: 390, height: 664 });
+  await expect(page.getByTestId('app')).toHaveClass(/is-mobile/);
+  await expect(page.getByTestId('tab-board')).toBeVisible();
 });
 
 /**
@@ -237,6 +325,45 @@ test('when the on-screen keyboard opens, the focused field is scrolled into the 
   // As much of the field as its column can show lies inside the shrunken app (all of it when it fits;
   // before the fix the field sat entirely below the app, under the keyboard).
   expect(geometry.visible, JSON.stringify(geometry)).toBeGreaterThanOrEqual(Math.min(geometry.fieldHeight, geometry.scrollerHeight) - 2);
+});
+
+test('with the keyboard up, a joke taller than its column is scrolled to the caret line, not its middle', async ({ page }) => {
+  await installFakeKeyboard(page);
+  const { ws, ids } = buildWorkspace((w, m) => ({ long: m.addJoke(w, m.addTopic(w, { title: 'Long' }), { title: 'Big', text: words(180, 'board') }) }));
+  await seed(page, ws);
+  await open(page);
+  const text = jokeCard(page, ids.long).getByTestId('joke-text');
+  const geometry = () => text.evaluate((el) => {
+    const f = el.getBoundingClientRect();
+    const scroller = el.closest('.col-scroll');
+    const s = scroller.getBoundingClientRect();
+    return { fieldTop: f.top, fieldBottom: f.bottom, fieldHeight: f.height, scrollerTop: s.top, scrollerBottom: s.bottom, scrollerHeight: s.height, scrollTop: scroller.scrollTop };
+  });
+  // Tap at the end of the joke to keep writing: caret at the end, the column showing the last line
+  // (what iOS does on focus). Then the keyboard opens.
+  await text.evaluate((el) => {
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+    const scroller = el.closest('.col-scroll');
+    scroller.scrollTop = scroller.scrollHeight;
+  });
+  await page.evaluate(() => window.__keyboard(336));
+  await expect(page.locator('html')).toHaveClass(/kb-open/);
+  const atEnd = await geometry();
+  expect(atEnd.fieldHeight, 'the joke is taller than the shrunken column').toBeGreaterThan(atEnd.scrollerHeight);
+  // The caret line (the field's last line) is inside the visible part of the column — centring the
+  // element put it ~460 px below it.
+  expect(atEnd.fieldBottom, JSON.stringify(atEnd)).toBeLessThanOrEqual(atEnd.scrollerBottom + 1);
+  expect(atEnd.fieldBottom, JSON.stringify(atEnd)).toBeGreaterThan(atEnd.scrollerTop + 20);
+  // iOS reports the keyboard height over several resize events: a repeat leaves the scroll alone.
+  await page.evaluate(() => window.__keyboard(336));
+  expect((await geometry()).scrollTop).toBe(atEnd.scrollTop);
+  // With the caret at the start, the first line is what gets revealed.
+  await text.evaluate((el) => el.setSelectionRange(0, 0));
+  await page.evaluate(() => window.__keyboard(336));
+  const atStart = await geometry();
+  expect(atStart.fieldTop, JSON.stringify(atStart)).toBeGreaterThanOrEqual(atStart.scrollerTop - 1);
+  expect(atStart.fieldTop, JSON.stringify(atStart)).toBeLessThan(atStart.scrollerTop + 60);
 });
 
 test('a card menu opened while the keyboard is up lands in the visible area and survives the keyboard closing', async ({ page }) => {

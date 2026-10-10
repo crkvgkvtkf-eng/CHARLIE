@@ -2,11 +2,13 @@
 // theme/column width, wire keyboard shortcuts, the visual-viewport (keyboard) variables, the
 // flush-on-hide listeners and the service-worker update flow, then render <App/>.
 import { html, render } from './lib.js';
-import { downloadJson, loadWorkspace, saveWorkspace, serializeExport, SYNC_KEY } from './storage.js';
+import { stableJson } from './model.js';
+import { STORAGE_KEY, SYNC_KEY, downloadJson, loadWorkspace, parseImport, saveWorkspace, serializeExport } from './storage.js';
 import { createStore } from './store.js';
+import { merge, syncedMapOf } from './sync.js';
 import { createSyncManager } from './syncManager.js';
 import { App } from './ui/App.js';
-import { MOBILE_QUERY, createFocusRequests, createToaster, isTextField } from './ui/common.js';
+import { MOBILE_QUERY, createFocusRequests, createToaster, isTextField, revealField } from './ui/common.js';
 
 const SAVE_TOAST_INTERVAL_MS = 60_000;
 const SW_UPDATE_INTERVAL_MS = 60 * 60 * 1000;
@@ -70,11 +72,10 @@ function setupViewport() {
     // The app just shrank to the visual viewport and the browser's own reveal pan was cancelled
     // above, so bring the field being edited back into view inside its own scroller (the column
     // or the More page); the window itself never scrolls. Re-run on every resize while the
-    // keyboard is open because iOS reports the final keyboard height over several events.
+    // keyboard is open because iOS reports the final keyboard height over several events;
+    // revealField only moves anything when the caret line is actually out of view.
     const active = document.activeElement;
-    if (keyboardOpen && mobileQuery && mobileQuery.matches && isTextField(active)) {
-      active.scrollIntoView({ block: 'center', behavior: 'instant' });
-    }
+    if (keyboardOpen && mobileQuery && mobileQuery.matches && isTextField(active)) revealField(active);
   };
   if (vv) {
     vv.addEventListener('resize', update);
@@ -82,6 +83,41 @@ function setupViewport() {
   }
   window.addEventListener('resize', update);
   update();
+}
+
+// ---------------------------------------------------------------------------
+// Other tabs and windows of this origin (§12: the app never silently loses user text)
+
+/**
+ * Folds writes by another tab or window of this origin into the store. Every tab keeps its own
+ * in-memory workspace, so without this the last tab to persist would overwrite the others' edits
+ * wholesale. A tab without unsaved edits simply adopts what the other tab wrote; a tab whose own
+ * edits are still inside the persist debounce merges the two, with `synced` = what this tab last
+ * wrote, so only a version that genuinely diverged on both sides leaves a conflict copy. The
+ * replace persists at once, which fires `storage` in the other tab with identical content, where
+ * the equality check ends the exchange; `source: 'sync'` keeps the sync scheduler quiet (the tab
+ * that made the edit syncs it).
+ * @param {{ ws: object|null }} persisted   holder of the workspace this tab last saved
+ */
+function setupCrossTabSync(store, persisted, toaster) {
+  window.addEventListener('storage', (e) => {
+    if (e.key !== STORAGE_KEY || e.newValue === null) return;
+    let incoming;
+    try {
+      incoming = parseImport(e.newValue);
+    } catch {
+      return; // the other tab wrote something unreadable: this tab's data stays as it is
+    }
+    const local = store.get();
+    if (stableJson(incoming) === stableJson(local)) return;
+    let next = incoming;
+    if (local !== persisted.ws) {
+      const result = merge(local, incoming, { synced: syncedMapOf(persisted.ws) });
+      next = result.workspace;
+      for (const name of result.conflictCopies) toaster.show({ message: `Kept a conflict copy: ${name}`, persistent: true });
+    }
+    store.replace(next, { source: 'sync', resetHistory: false });
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -161,8 +197,13 @@ function boot() {
   const focus = createFocusRequests();
 
   let lastSaveToastAt = 0;
+  const persisted = { ws: null }; // the snapshot this tab last wrote to localStorage (see setupCrossTabSync)
   const store = createStore(loadWorkspace(), {
-    persist: (ws) => saveWorkspace(ws),
+    persist: (ws) => {
+      const ok = saveWorkspace(ws);
+      if (ok) persisted.ws = ws;
+      return ok;
+    },
     onPersistError: (err) => {
       console.error('Persist failed', err);
       if (Date.now() - lastSaveToastAt < SAVE_TOAST_INTERVAL_MS) return;
@@ -190,6 +231,8 @@ function boot() {
   store.subscribe((ws) => applySettings(ws.settings));
   if (darkQuery) darkQuery.addEventListener('change', () => applySettings(store.get().settings));
 
+  persisted.ws = store.get(); // what was loaded is what storage holds
+  setupCrossTabSync(store, persisted, toaster);
   setupViewport();
   setupShortcuts(store);
   window.addEventListener('pagehide', () => store.flush());

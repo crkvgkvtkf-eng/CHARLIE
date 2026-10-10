@@ -5,7 +5,13 @@
 import { html, createContext, useContext, useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from '../lib.js';
 import { formatDuration } from '../timing.js';
 
-export const MOBILE_QUERY = '(max-width: 767.98px)';
+/**
+ * The mobile layout (SPEC §9.1): below the width breakpoint, and also on a touch device whose
+ * viewport is short — a phone turned to landscape is wider than the breakpoint but is still a
+ * phone, with a finger for a pointer and a keyboard that eats most of its height. Must match the
+ * media query of the mobile block in css/app.css.
+ */
+export const MOBILE_QUERY = '(max-width: 767.98px), (pointer: coarse) and (max-height: 500px)';
 const TOAST_MS = 3000;
 const TOAST_WITH_ACTION_MS = 8000;
 const MAX_TOASTS = 3;
@@ -34,6 +40,76 @@ function isOnScreen(el) {
     if (outside(node.getBoundingClientRect())) return false;
   }
   return true;
+}
+
+/** Nearest ancestor of `el` that scrolls vertically (overflow auto/scroll with overflowing content); null when none. */
+function findVerticalScroller(el) {
+  for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) {
+    const { overflowY } = getComputedStyle(node);
+    if ((overflowY === 'auto' || overflowY === 'scroll') && node.scrollHeight > node.clientHeight) return node;
+  }
+  return null;
+}
+
+/** Style properties that decide where a textarea wraps its text and how tall its lines are. */
+const MIRROR_PROPS = [
+  'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'fontVariant', 'letterSpacing', 'wordSpacing', 'lineHeight',
+  'textTransform', 'textIndent', 'tabSize', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+  'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderStyle',
+];
+
+/**
+ * Viewport rect of the line that holds the caret of a textarea: the text up to the caret is laid
+ * out again in a hidden mirror with the field's font, padding and width, and a marker span at its
+ * end lands where the caret is. Null for other fields, whose single line is the field itself.
+ */
+function caretLineRect(el) {
+  if (el.tagName !== 'TEXTAREA' || typeof el.selectionEnd !== 'number') return null;
+  const style = getComputedStyle(el);
+  const mirror = document.createElement('div');
+  for (const prop of MIRROR_PROPS) mirror.style[prop] = style[prop];
+  Object.assign(mirror.style, {
+    position: 'absolute', top: '0', left: '-9999px', visibility: 'hidden', boxSizing: 'border-box',
+    width: `${el.offsetWidth}px`, height: 'auto', overflow: 'hidden', whiteSpace: 'pre-wrap', overflowWrap: 'break-word',
+  });
+  mirror.textContent = el.value.slice(0, el.selectionEnd);
+  const marker = document.createElement('span');
+  marker.textContent = '\u200b';
+  mirror.appendChild(marker);
+  document.body.appendChild(mirror);
+  const lineTop = marker.offsetTop; // from the mirror's padding edge, like the caret from the field's
+  const lineHeight = marker.offsetHeight;
+  mirror.remove();
+  const top = el.getBoundingClientRect().top + parseFloat(style.borderTopWidth) + lineTop - el.scrollTop;
+  return { top, bottom: top + lineHeight };
+}
+
+const REVEAL_MARGIN_PX = 24;
+
+/**
+ * Brings a focused text field into the visible part of its scroller after the on-screen keyboard
+ * has shrunk the app (SPEC §9.1). A field that fits the scroller is centred, and only when it is
+ * not already fully visible. A field taller than the scroller is never centred — that would push
+ * both its first and its last line off screen — so the line holding the caret is scrolled into
+ * the visible band instead, with a margin, and only when it lies outside that band: iOS reports
+ * the final keyboard height over several resize events, and each one must leave a caret that is
+ * already in view (and the user's own scrolling) alone.
+ */
+export function revealField(el) {
+  const scroller = findVerticalScroller(el);
+  if (!scroller) return;
+  const s = scroller.getBoundingClientRect();
+  const top = s.top;
+  const bottom = Math.min(s.bottom, visibleHeight());
+  const field = el.getBoundingClientRect();
+  if (field.height <= bottom - top) {
+    if (field.top < top || field.bottom > bottom) el.scrollIntoView({ block: 'center', behavior: 'instant' });
+    return;
+  }
+  const line = caretLineRect(el) || field;
+  const margin = Math.min(REVEAL_MARGIN_PX, (bottom - top) / 4);
+  if (line.bottom > bottom - margin) scroller.scrollTop += line.bottom - (bottom - margin);
+  else if (line.top < top + margin) scroller.scrollTop -= top + margin - line.top;
 }
 
 // ---------------------------------------------------------------------------
@@ -267,11 +343,15 @@ function useTopDialog() {
 
 /**
  * Renders its children inside an open modal dialog. Mount = open; the owner unmounts it to close.
- * `onClose` fires for Esc (the `cancel` event) and for clicks on the backdrop.
+ * `onClose` fires for Esc (the `cancel` event) and for clicks on the backdrop. A click counts as
+ * on the backdrop only when the pointer also went DOWN there: `click` is dispatched to the common
+ * ancestor of the press and the release, which is the <dialog> itself when a text selection that
+ * started inside the dialog is released over the backdrop, and that must not discard the dialog.
  */
 export function Dialog({ onClose, label, testid = 'dialog', class: cls = '', children }) {
   const ref = useRef(null);
   const ui = useUi();
+  const downOnBackdrop = useRef(false);
   useLayoutEffect(() => {
     const el = ref.current;
     if (el && !el.open) el.showModal();
@@ -285,10 +365,16 @@ export function Dialog({ onClose, label, testid = 'dialog', class: cls = '', chi
     e.preventDefault(); // the owner removes the element; a native close would leave stale state
     onClose();
   };
-  const onClick = (e) => {
-    if (e.target === e.currentTarget) onClose();
+  const onPointerDown = (e) => {
+    downOnBackdrop.current = e.target === e.currentTarget;
   };
-  return html`<dialog ref=${ref} class="dialog ${cls}" aria-label=${label} data-testid=${testid} onCancel=${onCancel} onClick=${onClick}>
+  const onClick = (e) => {
+    const wasBackdrop = downOnBackdrop.current;
+    downOnBackdrop.current = false;
+    if (wasBackdrop && e.target === e.currentTarget) onClose();
+  };
+  return html`<dialog ref=${ref} class="dialog ${cls}" aria-label=${label} data-testid=${testid} onCancel=${onCancel}
+    onPointerDown=${onPointerDown} onClick=${onClick}>
     <div class="dialog-body">${children}</div>
     ${ui ? html`<${ToastHost} toaster=${ui.toaster} hostRef=${ref} />` : null}
   </dialog>`;
@@ -346,7 +432,7 @@ function PromptDialog({ request, onDone }) {
 /**
  * @param {object} props
  * @param {Element} props.anchor         the button the menu belongs to (for positioning and focus return)
- * @param {Array} props.items            [{ label, action, target, testid, data, onSelect, disabled, danger, checked, submenu, swatch },
+ * @param {Array} props.items            [{ label, action, target, testid, data, onSelect, disabled, danger, checked (boolean → menuitemradio), submenu, swatch },
  *                                        { divider: true }, { header }, { swatches: [{ label, action, swatch, checked, onSelect }] }]
  * @param {(reason: 'select'|'escape'|'outside') => void} props.onClose
  * @param {string} [props.label]         accessible name
@@ -496,10 +582,13 @@ export function Menu({ anchor, items, onClose, label = 'Menu' }) {
         </div>`;
       }
       const data = item.data || {};
-      return html`<button type="button" role="menuitem" key=${item.key ?? item.testid ?? `${item.action ?? item.target ?? i}`}
+      // An item with a `checked` state is one of a set of choices (the versions): only the radio
+      // role carries aria-checked, so assistive tech announces which one is current.
+      const checkable = item.checked != null;
+      return html`<button type="button" role=${checkable ? 'menuitemradio' : 'menuitem'} key=${item.key ?? item.testid ?? `${item.action ?? item.target ?? i}`}
         class="menu-item ${item.danger ? 'danger' : ''} ${item.back ? 'back' : ''}"
         data-testid=${item.testid ?? 'menu-item'} data-action=${item.action} data-target=${item.target}
-        data-id=${data.id} disabled=${item.disabled} aria-checked=${item.checked} aria-haspopup=${item.submenu ? 'menu' : undefined}
+        data-id=${data.id} disabled=${item.disabled} aria-checked=${checkable ? String(item.checked) : undefined} aria-haspopup=${item.submenu ? 'menu' : undefined}
         onClick=${() => select(item)}>
         ${item.back ? html`<${Icon} name="chevronLeft" size=${16} />` : null}
         ${item.swatch ? html`<span class="swatch" data-color=${item.swatch}></span>` : null}

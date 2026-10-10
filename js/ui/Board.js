@@ -84,10 +84,16 @@ export function Board({ ws, isMobile, initialTopicIndex = 0, onTopicIndexChange,
   // ----- mobile paging -------------------------------------------------------------------------
 
   const pageCount = topics.length + 1; // the trailing "+ Topic" page
+  // The page a programmatic scroll is on its way to, or null. A smooth scroll (a pager tap) passes
+  // every page in between and each one fires scroll events; following those would snap the pager
+  // back to the start and walk it across the pills, so they are ignored until the target is reached.
+  const pendingPage = useRef(null);
   const scrollToPage = useCallback((index, behavior = 'instant') => {
     const el = boardRef.current;
     if (!el) return;
     const i = clamp(index, 0, pageCount - 1);
+    const current = el.clientWidth ? Math.round(el.scrollLeft / el.clientWidth) : i;
+    pendingPage.current = current === i ? null : i; // no scroll happens (and no scroll event ends the wait) when already there
     el.scrollTo({ left: i * el.clientWidth, behavior });
     setActiveIndex(i);
     if (onTopicIndexChange) onTopicIndexChange(i);
@@ -101,9 +107,18 @@ export function Board({ ws, isMobile, initialTopicIndex = 0, onTopicIndexChange,
       const el = boardRef.current;
       if (!el || el.clientWidth === 0) return;
       const i = clamp(Math.round(el.scrollLeft / el.clientWidth), 0, pageCount - 1);
+      if (pendingPage.current !== null) {
+        if (i !== pendingPage.current) return; // an intermediate page of a smooth scroll
+        pendingPage.current = null;
+      }
       setActiveIndex((prev) => (prev === i ? prev : i));
       if (onTopicIndexChange) onTopicIndexChange(i);
     });
+  };
+  // A finger on the board during the animation takes over (the browser stops the smooth scroll
+  // where it is): the pager follows the user's swipe again from here on.
+  const onBoardPointerDown = () => {
+    pendingPage.current = null;
   };
   useEffect(() => () => cancelAnimationFrame(rafId.current), []);
 
@@ -211,7 +226,7 @@ export function Board({ ws, isMobile, initialTopicIndex = 0, onTopicIndexChange,
   return html`<div class="board-wrap">
     ${isMobile ? html`<${TopicPager} topics=${topics} activeIndex=${activeIndex} onPick=${(i) => scrollToPage(i, 'smooth')} />` : null}
     <div class="board" data-drop="topics" data-dnd-hscroll=${isMobile ? undefined : '1'} data-dnd-page=${isMobile ? '1' : undefined}
-      ref=${boardRef} onScroll=${onScroll}>
+      ref=${boardRef} onScroll=${onScroll} onPointerDown=${onBoardPointerDown}>
       ${topics.map((topic, index) => html`<${TopicColumn} key=${topic.id} ws=${ws} version=${version} topic=${topic} index=${index}
         count=${topics.length} setPositions=${setPositions} dnd=${dnd} isMobile=${isMobile}
         collapsed=${collapsed.includes(topic.id)} onCollapse=${(v) => setCollapsedFor(topic.id, v)}

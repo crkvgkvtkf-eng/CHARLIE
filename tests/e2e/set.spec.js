@@ -4,7 +4,8 @@
 import { test, expect } from '@playwright/test';
 import { formatDuration } from '../../js/timing.js';
 import {
-  DEFAULTS, buildWorkspace, jokeCard, open, readStored, sampleWorkspace, secondsFor, seed, setItem, setOrder, showBoard, showSet, words,
+  DEFAULTS, buildWorkspace, chooseFromMenu, jokeCard, open, openMenu, pickMenuItem, readStored, sampleWorkspace, secondsFor, seed, setItem,
+  setOrder, showBoard, showSet, words,
 } from './helpers.js';
 
 test('ticking jokes builds the set in tick order with badges, totals and the live tab label', async ({ page, isMobile }) => {
@@ -130,6 +131,30 @@ test('set order is independent of board position and survives a reload', async (
   const stored = await readStored(page);
   expect(stored.versions[0].set.jokeIds).toEqual([ids.pretzels, ids.security]);
   expect(stored.settings.targetSec).toBe(DEFAULTS.targetSec);
+});
+
+test('set rows reorder from their menu (the keyboard fallback for the drag) and focus stays on the moved row', async ({ page, isMobile }) => {
+  const { ws, ids } = sampleWorkspace();
+  await seed(page, ws);
+  await open(page);
+  await showSet(page, isMobile);
+  expect(await setOrder(page)).toEqual([ids.pretzels, ids.security]);
+
+  await openMenu(page, setItem(page, ids.pretzels).getByTestId('set-menu'));
+  await expect(page.getByTestId('menu').locator('[data-action="move-up"]')).toBeDisabled(); // already first
+  await pickMenuItem(page, 'move-down');
+  expect(await setOrder(page)).toEqual([ids.security, ids.pretzels]);
+  await expect(setItem(page, ids.pretzels).getByTestId('set-menu')).toBeFocused();
+
+  await chooseFromMenu(page, setItem(page, ids.pretzels).getByTestId('set-menu'), 'move-up');
+  expect(await setOrder(page)).toEqual([ids.pretzels, ids.security]);
+  await expect(setItem(page, ids.pretzels).getByTestId('set-menu')).toBeFocused();
+
+  await chooseFromMenu(page, setItem(page, ids.security).getByTestId('set-menu'), 'remove');
+  expect(await setOrder(page)).toEqual([ids.pretzels]);
+  await showBoard(page, isMobile);
+  await expect(jokeCard(page, ids.security).getByTestId('joke-inset')).not.toBeChecked();
+  await expect(jokeCard(page, ids.pretzels).getByTestId('joke-badge')).toHaveText('#1');
 });
 
 test('desktop sidebar collapses to a rail and remembers it', async ({ page, isMobile }) => {

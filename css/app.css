@@ -883,8 +883,9 @@ body.is-dragging .grip { cursor: grabbing; }
 .set-topic { max-width: 100%; font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .set-time { flex: none; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
 .set-time.overridden { color: var(--accent-text); }
-.set-remove { width: 30px; height: 30px; color: var(--faint); }
+.set-remove, .set-menu { width: 30px; height: 30px; color: var(--faint); }
 .set-remove:hover { color: var(--danger); }
+.set-menu:hover { color: var(--text); }
 
 .set-foot {
   display: grid;
@@ -1237,9 +1238,10 @@ dialog.dialog-versions { width: min(600px, calc(100vw - 32px)); }
 .boot-fallback button#boot-reload { background: var(--surface); color: var(--text); }
 
 /* ---------------------------------------------------------------------------
- * Mobile layout (< 768 px)
+ * Mobile layout (< 768 px, or a touch device in a short landscape viewport — a phone on its side;
+ * keep in step with MOBILE_QUERY in js/ui/common.js)
  * ------------------------------------------------------------------------- */
-@media (max-width: 767.98px) {
+@media (max-width: 767.98px), (pointer: coarse) and (max-height: 500px) {
   body { font-size: 16px; }
   .topbar { gap: 2px; padding-left: calc(8px + env(safe-area-inset-left)); padding-right: calc(6px + env(safe-area-inset-right)); }
   .version-switcher { max-width: 50vw; font-size: 15px; }
@@ -1284,7 +1286,9 @@ dialog.dialog-versions { width: min(600px, calc(100vw - 32px)); }
      The pseudo-element paints BELOW the element's own content (isolation + negative z-index), so the
      checkbox / radio inside a pill still receives taps and clicks aimed at it directly. */
   .grip, .icon-btn { position: relative; } /* win hit-testing over the in-flow neighbours they overlap */
-  .grip { width: 44px; height: 44px; margin: -8px -9px; }
+  /* z-index: the pill next to a grip comes later in the DOM and is a stacking context of its own, so
+     its full-width extender would otherwise take the taps on the grip's right few pixels. */
+  .grip { width: 44px; height: 44px; margin: -8px -9px; z-index: 1; }
   .card-meta .grip { margin-left: -14px; }
   .icon-btn, .sync-dot { width: 44px; height: 44px; }
   .topic-card .icon-btn { margin-block: -2px; }
@@ -1295,7 +1299,7 @@ dialog.dialog-versions { width: min(600px, calc(100vw - 32px)); }
   .alt-card .grip { margin: 0 -9px 0 -12px; }
   .alt-card .icon-btn { margin-block: 0; }
   .alt-card::before { top: 22px; } /* the connector stub stays level with the taller head's centre */
-  .set-remove { margin-block: -7px; }
+  .set-remove, .set-menu { margin-block: -7px; }
   .toast-close { margin-block: -7px; }
   .version-switcher { min-height: 44px; }
   .pill, .alts-toggle, .add-btn, .pager-pill, .dialog-head .btn-small { position: relative; isolation: isolate; }
@@ -1311,6 +1315,10 @@ dialog.dialog-versions { width: min(600px, calc(100vw - 32px)); }
   }
   .pill { min-height: 32px; }
   .pill input { width: 18px; height: 18px; }
+  .pager-add { min-width: 44px; } /* its ::after extends only the height */
+  .input, select.input { min-height: 44px; }
+  .toast { padding-top: 4px; padding-bottom: 4px; }
+  .toast-action { min-height: 44px; }
   .collapsed-note { min-height: 44px; }
   .settings .btn, .version-actions .btn { min-height: 44px; }
   .menu { max-width: calc(100vw - 16px); }
