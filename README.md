@@ -38,12 +38,14 @@ Your data lives on each device. To keep devices in step, the app stores a copy i
 
 1. Create a token: <https://github.com/settings/tokens/new?scopes=gist&description=Stand-Up%20Set%20Builder>
    (a *classic* token with only the **gist** scope; fine-grained tokens cannot use the Gist API). Pick an expiry you're happy with and copy the token.
-2. In the app: Settings (gear) → **Sync** → paste the token → **Connect**.
+2. In the app: **Sync** section (desktop: the gear → Settings; iPhone: the **More** tab) → paste the token → **Connect**.
 3. Repeat step 2 on the other device with the same token. The app finds the same gist automatically.
 
 Sync runs by itself (a couple of seconds after you stop editing, when the app opens, and when it returns to the foreground). If the same version was edited on both devices while offline, the newest copy wins and the other is kept as "<name> (conflict copy)" so nothing is lost. The token is stored only on your devices; you can revoke it on GitHub any time.
 
-**No token?** Settings → **Data** → Export JSON, then AirDrop / Files it to the other device and Import.
+**No token?** Settings / More → **Data** → Export JSON, then AirDrop / Files it to the other device and Import.
+
+Two tabs or windows of the same browser also stay in step with each other automatically.
 
 ## 4. Run locally
 
