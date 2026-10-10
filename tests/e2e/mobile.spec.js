@@ -173,16 +173,20 @@ test('touch targets: grips, tabs, menu items, pills, toggles, pager, "+" buttons
 });
 
 test('when the on-screen keyboard opens, the focused field is scrolled into the shrunken app', async ({ page }) => {
-  // A fake visualViewport whose height the test shrinks, as iOS does when the keyboard appears.
+  // A fake visualViewport whose height the test shrinks, as iOS does when the keyboard appears. Its
+  // size is read lazily: when an init script runs, Chromium has not applied the emulated viewport yet.
   await page.addInitScript(() => {
     const listeners = [];
+    let keyboardPx = 0;
     const vv = {
-      height: window.innerHeight, width: window.innerWidth, offsetTop: 0, offsetLeft: 0, pageTop: 0, pageLeft: 0, scale: 1,
+      get height() { return window.innerHeight - keyboardPx; },
+      get width() { return window.innerWidth; },
+      offsetTop: 0, offsetLeft: 0, pageTop: 0, pageLeft: 0, scale: 1,
       addEventListener: (type, fn) => { if (type === 'resize') listeners.push(fn); },
       removeEventListener: () => {},
     };
     Object.defineProperty(window, 'visualViewport', { value: vv, configurable: true });
-    window.__keyboard = (px) => { vv.height = window.innerHeight - px; listeners.forEach((fn) => fn(new Event('resize'))); };
+    window.__keyboard = (px) => { keyboardPx = px; listeners.forEach((fn) => fn(new Event('resize'))); };
   });
   const { ws, ids } = sampleWorkspace();
   await seed(page, ws);
@@ -194,13 +198,23 @@ test('when the on-screen keyboard opens, the focused field is scrolled into the 
   await page.evaluate(() => window.__keyboard(336));
   await expect(page.locator('html')).toHaveClass(/kb-open/);
   await expect(page.getByTestId('tab-board')).toBeHidden();
-  const inside = await page.evaluate(() => {
-    const field = document.activeElement.getBoundingClientRect();
+  const geometry = await page.evaluate(() => {
+    const el = document.activeElement;
+    const field = el.getBoundingClientRect();
     const app = document.querySelector('[data-testid="app"]').getBoundingClientRect();
-    return { field, app, inside: field.top >= app.top && field.bottom <= app.bottom + 1 };
+    const scroller = el.closest('.col-scroll').getBoundingClientRect();
+    const header = el.closest('.topic-col').querySelector('.topic-card').getBoundingClientRect();
+    const visible = Math.min(field.bottom, app.bottom) - Math.max(field.top, app.top);
+    return { fieldTop: field.top, fieldHeight: field.height, appHeight: app.height, scrollerHeight: scroller.height, scrollerBottom: scroller.bottom, headerTop: header.top, visible };
   });
-  expect(inside.app.height).toBe(664 - 336);
-  expect(inside.inside, JSON.stringify(inside)).toBe(true);
+  expect(geometry.appHeight).toBe(664 - 336);
+  // The column shrinks with the app (its scroller ends inside it) instead of overflowing and being
+  // scrolled out of view together with the topic header.
+  expect(geometry.scrollerBottom).toBeLessThanOrEqual(geometry.appHeight + 1);
+  expect(geometry.headerTop).toBeGreaterThanOrEqual(0);
+  // As much of the field as its column can show lies inside the shrunken app (all of it when it fits;
+  // before the fix the field sat entirely below the app, under the keyboard).
+  expect(geometry.visible, JSON.stringify(geometry)).toBeGreaterThanOrEqual(Math.min(geometry.fieldHeight, geometry.scrollerHeight) - 2);
 });
 
 test('revealing a joke taller than its column from the Set lands on its head, not mid-text', async ({ page }) => {

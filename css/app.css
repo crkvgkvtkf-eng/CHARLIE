@@ -983,7 +983,14 @@ body.is-dragging .grip { cursor: grabbing; }
   text-align: left;
 }
 .row-value { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-weight: 500; min-width: 0; }
-.kb-open .scroll-col, .kb-open .col-scroll { padding-bottom: calc(var(--kb-inset, 0px) + 16px); }
+/* Scroll room under the last field while the keyboard is open (§9.1). It is a trailing spacer INSIDE
+   the scroller rather than padding on the scroller box: a flex item cannot shrink below its own
+   padding, so padded scrollers would overflow the app once it has shrunk to the visual viewport. */
+.kb-open .scroll-col::after, .kb-open .col-scroll::after {
+  content: "";
+  display: block;
+  height: calc(var(--kb-inset, 0px) + 16px);
+}
 
 .settings { display: grid; gap: 22px; }
 .settings-section {
@@ -1273,7 +1280,9 @@ dialog.dialog-versions { width: min(600px, calc(100vw - 32px)); }
      transparent, so they simply grow and negative margins keep their rows the same height. Pills,
      toggles, "+" buttons, pager pills and the sheet "Done" button keep their compact look and extend
      their tappable box with an invisible ::after instead: for hit testing a pseudo-element is its
-     element, so a tap on it activates the label or button exactly like a tap on the visible part. */
+     element, so a tap on it activates the label or button exactly like a tap on the visible part.
+     The pseudo-element paints BELOW the element's own content (isolation + negative z-index), so the
+     checkbox / radio inside a pill still receives taps and clicks aimed at it directly. */
   .grip, .icon-btn { position: relative; } /* win hit-testing over the in-flow neighbours they overlap */
   .grip { width: 44px; height: 44px; margin: -8px -9px; }
   .card-meta .grip { margin-left: -14px; }
@@ -1285,10 +1294,11 @@ dialog.dialog-versions { width: min(600px, calc(100vw - 32px)); }
   .set-remove { margin-block: -7px; }
   .toast-close { margin-block: -7px; }
   .version-switcher { min-height: 44px; }
-  .pill, .alts-toggle, .add-btn, .pager-pill, .dialog-head .btn-small { position: relative; }
+  .pill, .alts-toggle, .add-btn, .pager-pill, .dialog-head .btn-small { position: relative; isolation: isolate; }
   .pill::after, .alts-toggle::after, .add-btn::after, .pager-pill::after, .dialog-head .btn-small::after {
     content: "";
     position: absolute;
+    z-index: -1;
     left: 0;
     right: 0;
     top: 50%;

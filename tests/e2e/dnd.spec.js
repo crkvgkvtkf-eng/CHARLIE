@@ -180,6 +180,8 @@ test.describe('iphone only', () => {
     await open(page);
     await page.getByTestId('pager-pill').nth(1).click();
     await expect(page.getByTestId('pager-pill').nth(1)).toHaveAttribute('aria-current', 'true');
+    const board = page.locator('.board');
+    await expect.poll(() => board.evaluate((el) => Math.abs(el.scrollLeft - el.clientWidth) < 1)).toBe(true); // smooth scroll settled
     const grip = jokeCard(page, ids.firstDate).getByTestId('joke-grip');
     const box = await grip.boundingBox();
     const at = { x: box.x + 6, y: box.y + box.height / 2 };
@@ -188,7 +190,7 @@ test.describe('iphone only', () => {
     await page.waitForTimeout(800); // well past the 150 ms hold and the 500 ms paging dwell
     await expect(page.locator('body')).toHaveClass(/is-dragging/);
     await expect(page.getByTestId('pager-pill').nth(1)).toHaveAttribute('aria-current', 'true');
-    expect(await page.locator('.board').evaluate((el) => Math.round(el.scrollLeft / el.clientWidth))).toBe(1);
+    expect(await board.evaluate((el) => Math.round(el.scrollLeft / el.clientWidth))).toBe(1);
     await page.evaluate((opts) => document.dispatchEvent(new PointerEvent('pointerup', { ...opts, buttons: 0 })), touchInit(at.x, at.y));
     await expect(page.locator('body')).not.toHaveClass(/is-dragging/);
     expect(await jokeIdsOn(topicCard(page, ids.dating))).toEqual([ids.apps, ids.firstDate]);

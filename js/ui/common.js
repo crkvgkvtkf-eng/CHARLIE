@@ -10,6 +10,8 @@ const TOAST_MS = 3000;
 const TOAST_WITH_ACTION_MS = 8000;
 const MAX_TOASTS = 3;
 const MENU_MARGIN_PX = 8;
+const MENU_GAP_PX = 4; // between the anchor and the menu
+const MENU_MIN_HEIGHT_PX = 120; // a menu squeezed harder than this would be unusable; it may then overlap
 
 // ---------------------------------------------------------------------------
 // App-wide context: store, sync manager, toaster, dialogs, focus requests, layout mode.
@@ -306,21 +308,25 @@ export function Menu({ anchor, items, onClose, label = 'Menu' }) {
     return [{ label: parent.label, back: true }, { divider: true }, ...parent.submenu];
   }, [items, path]);
 
-  // Position next to the anchor, clamped to the viewport, before paint.
+  // Position next to the anchor, clamped to the viewport, before paint. The menu opens below the
+  // anchor, else above it; when it fits neither way it takes the roomier side and shrinks to that
+  // room (it scrolls inside), so it never covers the button that opened it: a second tap on the
+  // button must close the menu, not land on whatever item happens to lie over the button.
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const a = anchor ? anchor.getBoundingClientRect() : { left: vw / 2, right: vw / 2, top: vh / 2, bottom: vh / 2 };
-    el.style.maxHeight = `${vh - MENU_MARGIN_PX * 2}px`;
+    const below = vh - MENU_MARGIN_PX - (a.bottom + MENU_GAP_PX);
+    const above = a.top - MENU_GAP_PX - MENU_MARGIN_PX;
+    el.style.maxHeight = `${Math.max(below, above, MENU_MIN_HEIGHT_PX)}px`;
     const r = el.getBoundingClientRect();
     let left = a.right - r.width;
     if (left < MENU_MARGIN_PX) left = Math.min(a.left, vw - r.width - MENU_MARGIN_PX);
     left = Math.max(MENU_MARGIN_PX, left);
-    let top = a.bottom + 4;
-    if (top + r.height > vh - MENU_MARGIN_PX) top = Math.max(MENU_MARGIN_PX, a.top - r.height - 4);
-    if (top + r.height > vh - MENU_MARGIN_PX) top = Math.max(MENU_MARGIN_PX, vh - r.height - MENU_MARGIN_PX);
+    let top = r.height <= below || below >= above ? a.bottom + MENU_GAP_PX : a.top - MENU_GAP_PX - r.height;
+    top = Math.max(MENU_MARGIN_PX, Math.min(top, vh - MENU_MARGIN_PX - r.height));
     el.style.left = `${Math.round(left)}px`;
     el.style.top = `${Math.round(top)}px`;
   }, [anchor, visible]);

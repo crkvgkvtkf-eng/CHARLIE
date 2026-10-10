@@ -9,8 +9,14 @@ test('clicking the ⋯ button or the version switcher again closes its menu', as
   await seed(page, ws);
   await open(page);
   const button = jokeCard(page, ids.security).getByTestId('joke-menu');
-  await openMenu(page, button);
+  const menu = await openMenu(page, button);
   await expect(button).toHaveAttribute('aria-expanded', 'true');
+  // The menu never covers its button (on a phone it fits neither below nor above a mid-screen card,
+  // so it shrinks to the roomier side instead); otherwise the second tap would land on an item.
+  const [menuBox, buttonBox] = await Promise.all([menu.boundingBox(), button.boundingBox()]);
+  const overlaps = menuBox.y < buttonBox.y + buttonBox.height && menuBox.y + menuBox.height > buttonBox.y
+    && menuBox.x < buttonBox.x + buttonBox.width && menuBox.x + menuBox.width > buttonBox.x;
+  expect(overlaps, JSON.stringify({ menuBox, buttonBox })).toBe(false);
   await button.click();
   await expect(page.getByTestId('menu')).toHaveCount(0);
   await expect(button).toHaveAttribute('aria-expanded', 'false');
