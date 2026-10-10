@@ -3,7 +3,7 @@
 // touch pointer events (pointerdown on the grip, 250 ms hold, pointermove on document, pointerup).
 import { test, expect } from '@playwright/test';
 import {
-  altCard, drag, edgeOf, jokeCard, jokeIdsOn, mouseDrag, open, sampleWorkspace, seed, setItem, setOrder, showSet, topicCard,
+  altCard, buildWorkspace, drag, edgeOf, jokeCard, jokeIdsOn, mouseDrag, open, sampleWorkspace, seed, setItem, setOrder, showSet, topicCard, words,
 } from './helpers.js';
 
 const touchInit = (x, y) => ({ pointerType: 'touch', pointerId: 1, isPrimary: true, clientX: x, clientY: y, button: 0, buttons: 1, bubbles: true, cancelable: true });
@@ -145,6 +145,36 @@ test.describe('desktop only', () => {
     expect(await jokeIdsOn(topicCard(page, ids.dating))).toEqual([ids.apps, ids.luggage, ids.firstDate]);
   });
 
+  test('reordering the set never auto-scrolls the board beside the sidebar', async ({ page }) => {
+    // Five topics make the board wider than the viewport; the set rows are dragged over the sidebar,
+    // to the RIGHT of the board, which used to read as "near the board's right edge" and scroll it.
+    const { ws, ids } = buildWorkspace((w, m) => {
+      const jokes = [];
+      for (let t = 1; t <= 5; t++) {
+        const topic = m.addTopic(w, { title: `Topic ${t}` });
+        jokes.push(m.addJoke(w, topic, { title: `Joke ${t}`, text: words(12) }));
+      }
+      jokes.forEach((id) => m.addToSet(w, id));
+      return { jokes };
+    });
+    await seed(page, ws);
+    await open(page);
+    await showSet(page, false);
+    const board = page.locator('.board');
+    expect(await board.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+    const from = await setItem(page, ids.jokes[3]).getByTestId('set-grip').boundingBox();
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(from.x + from.width / 2 + 8, from.y + from.height / 2 + 8);
+    const to = await edgeOf(setItem(page, ids.jokes[0]), 'top');
+    await page.mouse.move(to.x, to.y, { steps: 10 });
+    await page.waitForTimeout(700); // auto-scroll runs per frame while the pointer is held still
+    expect(await board.evaluate((el) => el.scrollLeft)).toBe(0);
+    await page.mouse.up();
+    expect(await setOrder(page)).toEqual([ids.jokes[3], ids.jokes[0], ids.jokes[1], ids.jokes[2], ids.jokes[4]]);
+    expect(await board.evaluate((el) => el.scrollLeft)).toBe(0);
+  });
+
   test('topic columns reorder horizontally by their grip', async ({ page }) => {
     const { ws, ids } = sampleWorkspace();
     await seed(page, ws);
@@ -195,6 +225,42 @@ test.describe('iphone only', () => {
     await expect(page.locator('body')).not.toHaveClass(/is-dragging/);
     expect(await jokeIdsOn(topicCard(page, ids.dating))).toEqual([ids.apps, ids.firstDate]);
     expect(await jokeIdsOn(topicCard(page, ids.airports))).toEqual([ids.security, ids.luggage, ids.pretzels]);
+  });
+
+  test('the insertion indicator is not painted outside the column while auto-scrolling', async ({ page }) => {
+    // Long jokes make the column scroll; the pointer parked at the column's bottom edge auto-scrolls
+    // it, and the gap after the last card may lie below the scroller, over the tab bar.
+    const { ws, ids } = buildWorkspace((w, m) => {
+      const t = m.addTopic(w, { title: 'Long' });
+      const first = m.addJoke(w, t, { title: 'First', text: words(60, 'a') });
+      for (let i = 0; i < 3; i++) m.addJoke(w, t, { title: `J${i}`, text: words(60, `b${i}`) });
+      return { first };
+    });
+    await seed(page, ws);
+    await open(page);
+    const grip = jokeCard(page, ids.first).getByTestId('joke-grip');
+    const g = await grip.boundingBox();
+    await grip.evaluate((el, opts) => el.dispatchEvent(new PointerEvent('pointerdown', opts)), touchInit(g.x + g.width / 2, g.y + g.height / 2));
+    await page.waitForTimeout(250);
+    const scroller = page.locator('.col-scroll').first();
+    const sb = await scroller.boundingBox();
+    const at = { x: sb.x + 150, y: sb.y + sb.height - 12 };
+    await page.evaluate((opts) => document.dispatchEvent(new PointerEvent('pointermove', opts)), touchInit(at.x, at.y));
+    await expect(page.locator('body')).toHaveClass(/is-dragging/);
+    await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(200); // auto-scroll ran
+    await expect.poll(() => scroller.evaluate((el) => el.scrollTop + el.clientHeight >= el.scrollHeight - 1)).toBe(true); // and reached the end
+    const geometry = await page.evaluate(() => {
+      const indicator = document.querySelector('.dnd-indicator');
+      const s = document.querySelector('.col-scroll').getBoundingClientRect();
+      const r = indicator.getBoundingClientRect();
+      return { shown: indicator.style.display !== 'none', top: r.top, bottom: r.bottom, scrollerTop: s.top, scrollerBottom: s.bottom };
+    });
+    if (geometry.shown) {
+      expect(geometry.top, JSON.stringify(geometry)).toBeGreaterThanOrEqual(geometry.scrollerTop - 2);
+      expect(geometry.bottom, JSON.stringify(geometry)).toBeLessThanOrEqual(geometry.scrollerBottom + 2);
+    }
+    await page.evaluate((opts) => document.dispatchEvent(new PointerEvent('pointerup', { ...opts, buttons: 0 })), touchInit(at.x, at.y));
+    await expect(page.locator('body')).not.toHaveClass(/is-dragging/);
   });
 
   test('holding near the board edge pages to the next topic and drops there', async ({ page }) => {

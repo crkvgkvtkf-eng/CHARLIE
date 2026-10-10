@@ -108,7 +108,7 @@ function PaceSection({ settings }) {
         onCommit=${(n) => commit({ pauseSec: n })} />
       <div class="field">
         <label for="target">Target length</label>
-        <input id="target" class="input" type="text" inputmode="numeric" data-testid="target-input" placeholder="5:00" value=${target}
+        <input id="target" class="input" type="text" data-testid="target-input" placeholder="5:00" value=${target}
           onInput=${onTargetInput} onBlur=${onTargetBlur} />
       </div>
     </div>

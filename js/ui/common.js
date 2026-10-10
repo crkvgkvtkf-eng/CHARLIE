@@ -13,6 +13,29 @@ const MENU_MARGIN_PX = 8;
 const MENU_GAP_PX = 4; // between the anchor and the menu
 const MENU_MIN_HEIGHT_PX = 120; // a menu squeezed harder than this would be unusable; it may then overlap
 
+/** Height of the part of the page the user can actually see (the visual viewport shrinks under the iOS keyboard). */
+function visibleHeight() {
+  const vv = window.visualViewport;
+  return vv && vv.height > 0 ? vv.height : window.innerHeight;
+}
+
+/**
+ * True while `el` is on screen: inside the visual viewport and not clipped away by any scrolling or
+ * clipping ancestor. An unmounted element (empty rect) counts as gone.
+ */
+function isOnScreen(el) {
+  const r = el.getBoundingClientRect();
+  if (r.width === 0 && r.height === 0) return false;
+  const outside = (b) => r.bottom <= b.top || r.top >= b.bottom || r.right <= b.left || r.left >= b.right;
+  if (outside({ top: 0, left: 0, right: window.innerWidth, bottom: visibleHeight() })) return false;
+  for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) {
+    const style = getComputedStyle(node);
+    if (!/auto|scroll|hidden|clip/.test(style.overflowX + style.overflowY)) continue;
+    if (outside(node.getBoundingClientRect())) return false;
+  }
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // App-wide context: store, sync manager, toaster, dialogs, focus requests, layout mode.
 
@@ -217,16 +240,44 @@ export function TimeChip({ seconds, words, overridden = false, testid, class: cl
 // ---------------------------------------------------------------------------
 // Dialog: native <dialog> opened with showModal() (inert background, Esc, focus trap for free).
 
+/** Open modal dialog elements, outermost first. Toasts render inside the last one (see ToastHost). */
+const openDialogs = [];
+const dialogListeners = new Set();
+
+function setDialogOpen(el, open) {
+  const i = openDialogs.indexOf(el);
+  if (open && i === -1) openDialogs.push(el);
+  else if (!open && i !== -1) openDialogs.splice(i, 1);
+  else return;
+  dialogListeners.forEach((fn) => fn());
+}
+
+/** The topmost open modal dialog element (null when none); the caller re-renders when it changes. */
+function useTopDialog() {
+  const topmost = () => openDialogs[openDialogs.length - 1] ?? null;
+  const [top, setTop] = useState(topmost);
+  useEffect(() => {
+    const update = () => setTop(topmost());
+    update();
+    dialogListeners.add(update);
+    return () => dialogListeners.delete(update);
+  }, []);
+  return top;
+}
+
 /**
  * Renders its children inside an open modal dialog. Mount = open; the owner unmounts it to close.
  * `onClose` fires for Esc (the `cancel` event) and for clicks on the backdrop.
  */
 export function Dialog({ onClose, label, testid = 'dialog', class: cls = '', children }) {
   const ref = useRef(null);
+  const ui = useUi();
   useLayoutEffect(() => {
     const el = ref.current;
     if (el && !el.open) el.showModal();
+    setDialogOpen(el, true);
     return () => {
+      setDialogOpen(el, false);
       if (el && el.open) el.close();
     };
   }, []);
@@ -239,6 +290,7 @@ export function Dialog({ onClose, label, testid = 'dialog', class: cls = '', chi
   };
   return html`<dialog ref=${ref} class="dialog ${cls}" aria-label=${label} data-testid=${testid} onCancel=${onCancel} onClick=${onClick}>
     <div class="dialog-body">${children}</div>
+    ${ui ? html`<${ToastHost} toaster=${ui.toaster} hostRef=${ref} />` : null}
   </dialog>`;
 }
 
@@ -308,15 +360,16 @@ export function Menu({ anchor, items, onClose, label = 'Menu' }) {
     return [{ label: parent.label, back: true }, { divider: true }, ...parent.submenu];
   }, [items, path]);
 
-  // Position next to the anchor, clamped to the viewport, before paint. The menu opens below the
-  // anchor, else above it; when it fits neither way it takes the roomier side and shrinks to that
-  // room (it scrolls inside), so it never covers the button that opened it: a second tap on the
-  // button must close the menu, not land on whatever item happens to lie over the button.
-  useLayoutEffect(() => {
+  // Position next to the anchor, clamped to the visible part of the viewport (not the part under
+  // the iOS keyboard). The menu opens below the anchor, else above it; when it fits neither way it
+  // takes the roomier side and shrinks to that room (it scrolls inside), so it never covers the
+  // button that opened it: a second tap on the button must close the menu, not land on whatever
+  // item happens to lie over the button.
+  const place = () => {
     const el = ref.current;
     if (!el) return;
     const vw = window.innerWidth;
-    const vh = window.innerHeight;
+    const vh = visibleHeight();
     const a = anchor ? anchor.getBoundingClientRect() : { left: vw / 2, right: vw / 2, top: vh / 2, bottom: vh / 2 };
     const below = vh - MENU_MARGIN_PX - (a.bottom + MENU_GAP_PX);
     const above = a.top - MENU_GAP_PX - MENU_MARGIN_PX;
@@ -329,7 +382,8 @@ export function Menu({ anchor, items, onClose, label = 'Menu' }) {
     top = Math.max(MENU_MARGIN_PX, Math.min(top, vh - MENU_MARGIN_PX - r.height));
     el.style.left = `${Math.round(left)}px`;
     el.style.top = `${Math.round(top)}px`;
-  }, [anchor, visible]);
+  };
+  useLayoutEffect(place, [anchor, visible]);
 
   // Focus the first item when the menu opens and whenever a submenu level is entered or left.
   // Deliberately not tied to `visible`: the items array is rebuilt on every parent render (a
@@ -344,26 +398,43 @@ export function Menu({ anchor, items, onClose, label = 'Menu' }) {
     if (anchor && typeof anchor.focus === 'function') anchor.focus({ preventScroll: true });
   };
 
-  // Close on outside pointerdown, on scrolling elsewhere, on resize.
+  // Close on outside pointerdown and on Escape (wherever focus is: clicking a header or divider
+  // moves focus out of the items, and Esc must still work then). Scrolls and resizes elsewhere do
+  // NOT close the menu by themselves: the layout moves under an open menu whenever the on-screen
+  // keyboard retracts (the column grows back and its scroll position is clamped), and the very tap
+  // that opened a card menu while editing is what dismisses the keyboard. The menu follows its
+  // anchor instead and closes only once the anchor has left the screen.
   useEffect(() => {
     const onDown = (e) => {
       const el = ref.current;
       if (el && !el.contains(e.target) && !(anchor && anchor.contains(e.target))) onClose('outside');
     };
-    const onScroll = (e) => {
-      if (ref.current && ref.current.contains(e.target)) return;
-      onClose('outside');
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      focusAnchor();
+      onClose('escape');
     };
-    const onResize = () => onClose('outside');
+    const onLayoutChange = (e) => {
+      if (e.type === 'scroll' && ref.current && ref.current.contains(e.target)) return; // scrolling inside the menu
+      if (anchor && !isOnScreen(anchor)) onClose('outside');
+      else place();
+    };
+    const vv = window.visualViewport;
     document.addEventListener('pointerdown', onDown, true);
-    document.addEventListener('scroll', onScroll, true);
-    window.addEventListener('resize', onResize);
+    document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('scroll', onLayoutChange, true);
+    window.addEventListener('resize', onLayoutChange);
+    if (vv) vv.addEventListener('resize', onLayoutChange);
     return () => {
       document.removeEventListener('pointerdown', onDown, true);
-      document.removeEventListener('scroll', onScroll, true);
-      window.removeEventListener('resize', onResize);
+      document.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('scroll', onLayoutChange, true);
+      window.removeEventListener('resize', onLayoutChange);
+      if (vv) vv.removeEventListener('resize', onLayoutChange);
     };
-  }, [anchor, onClose]);
+  }, [anchor, onClose]); // eslint-disable-line react-hooks/exhaustive-deps -- place/focusAnchor only read refs and `anchor`
 
   const select = (item) => {
     if (item.disabled) return;
@@ -395,12 +466,6 @@ export function Menu({ anchor, items, onClose, label = 'Menu' }) {
       case 'ArrowLeft':
         if (path.length) { e.preventDefault(); setPath(path.slice(0, -1)); }
         break;
-      case 'Escape':
-        e.preventDefault();
-        e.stopPropagation();
-        focusAnchor();
-        onClose('escape');
-        break;
       case 'Tab':
         e.preventDefault();
         focusAnchor();
@@ -411,7 +476,14 @@ export function Menu({ anchor, items, onClose, label = 'Menu' }) {
     }
   };
 
-  return html`<div class="menu" role="menu" aria-label=${label} data-testid="menu" ref=${ref} onKeyDown=${onKeyDown}>
+  // A press on a header, divider or padding keeps keyboard focus on the current item (the default
+  // would move it to <body>, and arrow keys would stop working); the root is focusable as a last
+  // resort so key handling never leaves the menu while it is open.
+  const onPointerDown = (e) => {
+    if (!e.target.closest('.menu-item')) e.preventDefault();
+  };
+
+  return html`<div class="menu" role="menu" aria-label=${label} data-testid="menu" ref=${ref} tabindex="-1" onKeyDown=${onKeyDown} onPointerDown=${onPointerDown}>
     ${visible.map((item, i) => {
       if (item.divider) return html`<div class="menu-divider" role="separator" key=${`d${i}`}></div>`;
       if (item.header) return html`<div class="menu-header" key=${`h${i}`}>${item.header}</div>`;
@@ -474,14 +546,23 @@ export function createToaster() {
   };
 }
 
-export function ToastHost({ toaster }) {
+/**
+ * Renders the toaster's toasts. A modal <dialog> makes everything outside it inert — a toast in
+ * the normal document (or a popover shown on top) is then invisible behind the dialog or at best
+ * unclickable — so each Dialog renders its own host inside the dialog element and only the host
+ * belonging to the topmost open dialog (or the app-level one when none is open) shows the toasts.
+ * @param {{ current: Element|null }} [hostRef]  the dialog element this host lives in; omitted for the app-level host
+ */
+export function ToastHost({ toaster, hostRef = null }) {
   const [toasts, setToasts] = useState(() => toaster.get());
   useEffect(() => {
     setToasts(toaster.get());
     return toaster.subscribe(setToasts);
   }, [toaster]);
+  const top = useTopDialog();
+  const active = hostRef ? hostRef.current !== null && top === hostRef.current : top === null;
   return html`<div class="toasts" aria-live="polite">
-    ${toasts.map((t) => html`<${Toast} key=${t.id} toast=${t} onDismiss=${() => toaster.dismiss(t.id)} />`)}
+    ${active ? toasts.map((t) => html`<${Toast} key=${t.id} toast=${t} onDismiss=${() => toaster.dismiss(t.id)} />`) : null}
   </div>`;
 }
 

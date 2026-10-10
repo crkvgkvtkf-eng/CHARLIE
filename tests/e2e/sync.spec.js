@@ -151,3 +151,17 @@ test('the sync dot opens Settings › Sync', async ({ browser, contextOptions, i
   }
   await a.context.close();
 });
+
+test('the app boots without errors when service workers are blocked', async ({ browser, contextOptions }) => {
+  // register() resolves without a registration here (and in locked-down browsers); the update flow must cope.
+  const fake = createFakeGithub();
+  const a = await newDevice(browser, contextOptions, fake);
+  const errors = [];
+  a.page.on('pageerror', (e) => errors.push(e.message));
+  await open(a.page);
+  await a.page.getByTestId('add-topic').click();
+  await expect(a.page.getByTestId('topic-card')).toHaveCount(1);
+  await a.page.waitForTimeout(300);
+  expect(errors).toEqual([]);
+  await a.context.close();
+});

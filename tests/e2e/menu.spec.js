@@ -2,7 +2,7 @@
 // while a menu is open, and focus returns to the opening button when an item is chosen or the
 // menu is left with Tab (Escape is covered in board.spec.js).
 import { test, expect } from '@playwright/test';
-import { answerDialog, jokeCard, open, openMenu, sampleWorkspace, seed, topicCard } from './helpers.js';
+import { answerDialog, jokeCard, jokeIdsOn, open, openMenu, sampleWorkspace, seed, topicCard } from './helpers.js';
 
 test('clicking the ⋯ button or the version switcher again closes its menu', async ({ page }) => {
   const { ws, ids } = sampleWorkspace();
@@ -70,5 +70,40 @@ test.describe('keyboard', () => {
     await page.keyboard.press('Tab');
     await expect(page.getByTestId('menu')).toHaveCount(0);
     await expect(jokeButton).toBeFocused();
+  });
+
+  test('Escape and the arrow keys keep working after a click on a menu header or divider', async ({ page }) => {
+    const { ws, ids } = sampleWorkspace();
+    await seed(page, ws);
+    await open(page);
+    const button = topicCard(page, ids.airports).getByTestId('topic-menu');
+    const menu = await openMenu(page, button);
+    await menu.locator('.menu-header').click();
+    await expect(menu).toHaveCount(1);
+    await page.keyboard.press('ArrowDown');
+    await expect(menu.locator('[data-action="collapse"]')).toBeFocused(); // focus stayed on the first item
+    await menu.locator('.menu-divider').first().click({ force: true });
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('menu')).toHaveCount(0);
+    await expect(button).toBeFocused();
+  });
+
+  test('moving a joke to another topic from the submenu keeps focus on the moved card\'s menu button', async ({ page }) => {
+    const { ws, ids } = sampleWorkspace();
+    await seed(page, ws);
+    await open(page);
+    await openMenu(page, jokeCard(page, ids.luggage).getByTestId('joke-menu'));
+    await page.getByTestId('menu').locator('[data-action="move-to-topic"]').click();
+    await page.getByTestId('menu').locator(`[data-target="${ids.dating}"]`).click();
+    await expect(page.getByTestId('menu')).toHaveCount(0);
+    expect(await jokeIdsOn(topicCard(page, ids.dating))).toEqual([ids.apps, ids.firstDate, ids.luggage]);
+    await expect(jokeCard(page, ids.luggage).getByTestId('joke-menu')).toBeFocused();
+
+    // Same for an alt moved to another joke.
+    await openMenu(page, jokeCard(page, ids.apps).getByTestId('alt-menu').first());
+    await page.getByTestId('menu').locator('[data-action="move-to-joke"]').click();
+    await page.getByTestId('menu').locator(`[data-target="${ids.firstDate}"]`).click();
+    await expect(page.getByTestId('menu')).toHaveCount(0);
+    await expect(jokeCard(page, ids.firstDate).getByTestId('alt-menu')).toBeFocused();
   });
 });

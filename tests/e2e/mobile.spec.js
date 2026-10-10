@@ -162,6 +162,14 @@ test('touch targets: grips, tabs, menu items, pills, toggles, pager, "+" buttons
   expect(await tapHeight(apps.locator('.radio-pill').first()), 'Use original pill').toBeGreaterThanOrEqual(44);
   expect(await tapHeight(apps.getByTestId('alt-card').first().locator('.pill')), 'alt Use this pill').toBeGreaterThanOrEqual(44);
   expect(await tapHeight(apps.getByTestId('alt-menu').first()), 'alt menu').toBeGreaterThanOrEqual(44);
+  // The extended hit boxes stay inside their rows: the top of a textarea / title is the field itself,
+  // not the pill or grip above it (a tap on the first text line must place the caret, not toggle the alt).
+  const hitAtTop = (locator) => locator.evaluate((el) => {
+    const b = el.getBoundingClientRect();
+    return [1, 2, 3].map((dy) => document.elementFromPoint(b.left + 40, b.top + dy) === el);
+  });
+  expect(await hitAtTop(apps.getByTestId('alt-card').first().getByTestId('alt-text')), 'alt textarea top rows').toEqual([true, true, true]);
+  expect(await hitAtTop(apps.getByTestId('joke-title')), 'joke title top rows').toEqual([true, true, true]);
 
   await apps.getByTestId('joke-menu').click();
   const item = await page.getByTestId('menu').locator('[data-action="add-alt"]').boundingBox();
@@ -170,11 +178,21 @@ test('touch targets: grips, tabs, menu items, pills, toggles, pager, "+" buttons
 
   await page.getByTestId('tab-set').click();
   expect(await tapHeight(page.getByTestId('set-remove').first()), 'set remove').toBeGreaterThanOrEqual(44);
+  expect(await tapHeight(page.getByTestId('set-title').first()), 'set title').toBeGreaterThanOrEqual(44);
+
+  // The version name in Manage versions switches versions: it needs the same height.
+  await page.getByTestId('version-switcher').click();
+  await page.getByTestId('menu').getByTestId('version-manage').click();
+  await page.getByTestId('version-dialog').getByTestId('version-new-blank').click();
+  expect(await tapHeight(page.locator('.version-pick:not(:disabled)').first()), 'version pick').toBeGreaterThanOrEqual(44);
 });
 
-test('when the on-screen keyboard opens, the focused field is scrolled into the shrunken app', async ({ page }) => {
-  // A fake visualViewport whose height the test shrinks, as iOS does when the keyboard appears. Its
-  // size is read lazily: when an init script runs, Chromium has not applied the emulated viewport yet.
+/**
+ * Installs a fake visualViewport whose height the test shrinks with `window.__keyboard(px)`, as iOS
+ * does when the keyboard appears (and grows back with `__keyboard(0)`). Its size is read lazily:
+ * when an init script runs, Chromium has not applied the emulated viewport yet.
+ */
+async function installFakeKeyboard(page) {
   await page.addInitScript(() => {
     const listeners = [];
     let keyboardPx = 0;
@@ -183,11 +201,15 @@ test('when the on-screen keyboard opens, the focused field is scrolled into the 
       get width() { return window.innerWidth; },
       offsetTop: 0, offsetLeft: 0, pageTop: 0, pageLeft: 0, scale: 1,
       addEventListener: (type, fn) => { if (type === 'resize') listeners.push(fn); },
-      removeEventListener: () => {},
+      removeEventListener: (type, fn) => { const i = listeners.indexOf(fn); if (i !== -1) listeners.splice(i, 1); },
     };
     Object.defineProperty(window, 'visualViewport', { value: vv, configurable: true });
     window.__keyboard = (px) => { keyboardPx = px; listeners.forEach((fn) => fn(new Event('resize'))); };
   });
+}
+
+test('when the on-screen keyboard opens, the focused field is scrolled into the shrunken app', async ({ page }) => {
+  await installFakeKeyboard(page);
   const { ws, ids } = sampleWorkspace();
   await seed(page, ws);
   await open(page);
@@ -215,6 +237,38 @@ test('when the on-screen keyboard opens, the focused field is scrolled into the 
   // As much of the field as its column can show lies inside the shrunken app (all of it when it fits;
   // before the fix the field sat entirely below the app, under the keyboard).
   expect(geometry.visible, JSON.stringify(geometry)).toBeGreaterThanOrEqual(Math.min(geometry.fieldHeight, geometry.scrollerHeight) - 2);
+});
+
+test('a card menu opened while the keyboard is up lands in the visible area and survives the keyboard closing', async ({ page }) => {
+  // Tapping ⋯ while editing blurs the textarea; iOS then retracts the keyboard, the column grows
+  // back and its scroll position is clamped. That layout-driven scroll must not close the menu.
+  await installFakeKeyboard(page);
+  const { ws, ids } = sampleWorkspace();
+  await seed(page, ws);
+  await open(page);
+  const card = jokeCard(page, ids.pretzels);
+  const text = card.getByTestId('joke-text');
+  await text.scrollIntoViewIfNeeded();
+  await text.click();
+  await page.evaluate(() => window.__keyboard(336));
+  await expect(page.locator('html')).toHaveClass(/kb-open/);
+  await card.getByTestId('joke-menu').click();
+  const menu = page.getByTestId('menu');
+  await expect(menu).toHaveCount(1);
+  const menuBox = await menu.boundingBox();
+  expect(menuBox.y + menuBox.height, 'menu inside the visual viewport (above the keyboard)').toBeLessThanOrEqual(664 - 336);
+
+  await page.evaluate(() => window.__keyboard(0));
+  await expect(page.locator('html')).not.toHaveClass(/kb-open/);
+  // Whether the clamp moves this column depends on its height; make sure a scroll happens either way.
+  await page.locator('.col-scroll').first().evaluate((el) => { el.scrollTop -= 30; });
+  await page.waitForTimeout(300);
+  await expect(menu).toHaveCount(1);
+  await expect(menu.locator('[data-action="manual-time"]')).toBeVisible();
+  // The menu followed its button (it sits right above or right below it again).
+  const [button, moved] = await Promise.all([card.getByTestId('joke-menu').boundingBox(), menu.boundingBox()]);
+  const adjacent = Math.abs(moved.y + moved.height + 4 - button.y) < 2 || Math.abs(moved.y - (button.y + button.height + 4)) < 2;
+  expect(adjacent, JSON.stringify({ button, moved })).toBe(true);
 });
 
 test('revealing a joke taller than its column from the Set lands on its head, not mid-text', async ({ page }) => {

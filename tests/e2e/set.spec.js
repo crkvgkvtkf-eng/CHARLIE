@@ -105,6 +105,19 @@ test('clicking a set row reveals the joke on the board with a flash', async ({ p
   await expect(card).toBeInViewport();
 });
 
+test('under reduced motion the reveal highlight still clears', async ({ page, isMobile }) => {
+  // No animation runs, so no animationend arrives; the outline must not stay on the card for ever.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const { ws, ids } = sampleWorkspace();
+  await seed(page, ws);
+  await open(page);
+  await showSet(page, isMobile);
+  await setItem(page, ids.security).getByTestId('set-title').click();
+  const card = jokeCard(page, ids.security);
+  await expect(card).toHaveClass(/flash/);
+  await expect(card).not.toHaveClass(/flash/, { timeout: 3000 });
+});
+
 test('set order is independent of board position and survives a reload', async ({ page, isMobile }) => {
   const { ws, ids } = sampleWorkspace();
   await seed(page, ws);

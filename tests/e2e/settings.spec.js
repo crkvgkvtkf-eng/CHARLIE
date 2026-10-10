@@ -76,6 +76,8 @@ test('target length is edited as m:ss and drives the delta', async ({ page, isMo
   const settings = await openSettings(page, isMobile);
   const target = settings.getByTestId('target-input');
   await expect(target).toHaveValue('5:00');
+  // "m:ss" needs a colon: the iOS numeric keypad has none, so the field must not ask for it.
+  await expect(target).not.toHaveAttribute('inputmode', /numeric|decimal|tel/);
   await target.fill('0:45');
   await target.blur();
   await expect(target).toHaveValue('0:45');
@@ -145,4 +147,30 @@ test('theme and column width apply to the document', async ({ page, isMobile }) 
   }
   await page.reload();
   await expect(root).toHaveAttribute('data-theme', 'light');
+});
+
+test('a toast raised while the Settings dialog is open is visible above it and can be dismissed', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'Settings is a page, not a modal dialog, on the phone');
+  const { ws } = oneJokeInSet();
+  await seed(page, ws);
+  await open(page);
+  const settings = await openSettings(page, isMobile);
+  await settings.getByTestId('import-input').setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('not json') });
+  const toast = page.getByTestId('toast').filter({ hasText: 'not valid JSON' });
+  await expect(toast).toHaveCount(1);
+  // A modal dialog makes the rest of the page inert: the toast must be hit-testable, i.e. rendered inside the dialog.
+  const onTop = await toast.evaluate((el) => {
+    const b = el.getBoundingClientRect();
+    return el.contains(document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2));
+  });
+  expect(onTop).toBe(true);
+  await toast.getByRole('button', { name: 'Dismiss' }).click({ timeout: 2000 });
+  await expect(page.getByTestId('toast')).toHaveCount(0);
+
+  // A persistent toast moves back out with the dialog.
+  await settings.getByTestId('import-input').setInputFiles({ name: 'bad2.json', mimeType: 'application/json', buffer: Buffer.from('{not json') });
+  await expect(page.getByTestId('toast')).toHaveCount(1);
+  await closeSettings(page, isMobile);
+  await expect(page.getByTestId('toast')).toHaveCount(1);
+  await expect(page.getByTestId('toast')).toBeVisible();
 });

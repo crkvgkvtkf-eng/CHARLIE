@@ -1286,11 +1286,15 @@ dialog.dialog-versions { width: min(600px, calc(100vw - 32px)); }
   .grip, .icon-btn { position: relative; } /* win hit-testing over the in-flow neighbours they overlap */
   .grip { width: 44px; height: 44px; margin: -8px -9px; }
   .card-meta .grip { margin-left: -14px; }
-  .alt-card .grip { margin: -8px -9px -8px -12px; }
   .icon-btn, .sync-dot { width: 44px; height: 44px; }
   .topic-card .icon-btn { margin-block: -2px; }
   .card-meta .icon-btn { margin-block: -5px; }
-  .alt-card .icon-btn { margin-block: -4px; }
+  /* The alt head is the one row too short to absorb 44 px controls: it grows to hold them (and the
+     pill's extended box) in full, so none of them overhangs the alt textarea below. */
+  .alt-card .card-head { min-height: 44px; padding-top: 0; }
+  .alt-card .grip { margin: 0 -9px 0 -12px; }
+  .alt-card .icon-btn { margin-block: 0; }
+  .alt-card::before { top: 22px; } /* the connector stub stays level with the taller head's centre */
   .set-remove { margin-block: -7px; }
   .toast-close { margin-block: -7px; }
   .version-switcher { min-height: 44px; }
@@ -1326,7 +1330,9 @@ dialog.dialog-versions { width: min(600px, calc(100vw - 32px)); }
   .set-panel { width: 100%; flex: 1; border-left: 0; min-height: 0; }
   .set-head { padding-top: 14px; }
   .set-item { padding: 8px 4px 8px 8px; }
+  .set-title { min-height: 44px; align-self: stretch; justify-content: center; }
   .set-title-text { font-size: 15px; }
+  .version-pick { min-height: 44px; }
   .set-foot { padding-bottom: 14px; }
 
   .toasts { bottom: calc(var(--tabbar-h) + 12px + env(safe-area-inset-bottom) + var(--kb-inset, 0px)); }

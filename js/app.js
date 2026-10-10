@@ -128,6 +128,7 @@ async function registerServiceWorker(toaster, store) {
     console.warn('Service worker registration failed', err);
     return;
   }
+  if (!reg) return; // a blocked registration resolves without one (test tooling, locked-down browsers)
   const offerUpdate = () => {
     toaster.show({
       key: 'sw-update',

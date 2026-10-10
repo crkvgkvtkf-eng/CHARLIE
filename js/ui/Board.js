@@ -14,15 +14,30 @@ const COLLAPSED_KEY = 'ssb.ui.collapsed';
 /** Topic colour presets (stored by name; css/app.css maps each to a tint and a connector colour). */
 export const TOPIC_COLORS = ['rose', 'amber', 'lime', 'teal', 'sky', 'violet'];
 const FLASH_CLASS = 'flash';
+const FLASH_MS = 1200; // matches the CSS animation; the timer below is the fallback when it does not run
+/** Pending flash timers per card, so a second reveal of the same card restarts rather than cuts short. */
+const flashTimers = new WeakMap();
 
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
 
-/** Outline flash on a revealed card (SPEC §9.5); the animation is defined in CSS. */
+/**
+ * Outline flash on a revealed card (SPEC §9.5); the animation is defined in CSS. Under
+ * prefers-reduced-motion the stylesheet replaces it with a static outline and no animationend
+ * ever fires, so a timer clears the class as well.
+ */
 function flash(el) {
+  clearTimeout(flashTimers.get(el));
   el.classList.remove(FLASH_CLASS);
   void el.offsetWidth; // restart the animation when the same card is revealed twice
   el.classList.add(FLASH_CLASS);
-  el.addEventListener('animationend', () => el.classList.remove(FLASH_CLASS), { once: true });
+  const done = () => {
+    clearTimeout(flashTimers.get(el));
+    flashTimers.delete(el);
+    el.removeEventListener('animationend', done);
+    el.classList.remove(FLASH_CLASS);
+  };
+  el.addEventListener('animationend', done);
+  flashTimers.set(el, setTimeout(done, FLASH_MS + 100));
 }
 
 /** Attaches a grip element to the drag controller for the lifetime of the card. */
@@ -333,6 +348,7 @@ function JokeCard({ ws, version, topic, joke, index, count, position, dnd, isMob
   useGrip(dnd, gripRef, cardRef, 'joke', joke.id);
   useMountFocus(titleRef, joke.id, 'title');
   useMountFocus(textRef, joke.id, 'text');
+  useMountFocus(menuButtonRef, joke.id, 'menu'); // the card re-mounts under its new topic after "Move to topic…"
 
   const inSet = position !== null;
   const delivered = deliveredText(joke);
@@ -411,7 +427,12 @@ function JokeCard({ ws, version, topic, joke, index, count, position, dnd, isMob
         label: topicLabel(t, version.topics.indexOf(t)),
         target: t.id,
         swatch: t.color ?? undefined,
-        onSelect: () => store.actions.moveJoke(joke.id, t.id),
+        onSelect: () => {
+          // The menu hands focus back to this ⋯ button, but the card is about to be re-created
+          // under the target topic; the re-mounted button claims the focus (keyboard users keep their place).
+          focus.request(joke.id, 'menu');
+          store.actions.moveJoke(joke.id, t.id);
+        },
       })),
     },
     { label: 'Move up', action: 'move-up', disabled: index === 0, onSelect: () => store.actions.moveJoke(joke.id, topic.id, index - 1) },
@@ -465,7 +486,7 @@ function JokeCard({ ws, version, topic, joke, index, count, position, dnd, isMob
 // Alt card
 
 function AltCard({ topic, joke, alt, index, count, radioName, dnd }) {
-  const { store } = useUi();
+  const { store, focus } = useUi();
   const cardRef = useRef(null);
   const gripRef = useRef(null);
   const textRef = useRef(null);
@@ -474,6 +495,7 @@ function AltCard({ topic, joke, alt, index, count, radioName, dnd }) {
   const [text, setText] = useDraft(alt.text);
   useGrip(dnd, gripRef, cardRef, 'alt', alt.id);
   useMountFocus(textRef, alt.id, 'text');
+  useMountFocus(menuButtonRef, alt.id, 'menu'); // re-mounted under another joke after "Move to joke…"
 
   const active = joke.activeAltId === alt.id;
   const onTextInput = (e) => {
@@ -491,7 +513,14 @@ function AltCard({ topic, joke, alt, index, count, radioName, dnd }) {
       label: 'Move to joke…',
       action: 'move-to-joke',
       disabled: otherJokes.length === 0,
-      submenu: otherJokes.map((j) => ({ label: jokeLabel(j), target: j.id, onSelect: () => store.actions.moveAlt(alt.id, j.id) })),
+      submenu: otherJokes.map((j) => ({
+        label: jokeLabel(j),
+        target: j.id,
+        onSelect: () => {
+          focus.request(alt.id, 'menu');
+          store.actions.moveAlt(alt.id, j.id);
+        },
+      })),
     },
     { label: 'Move up', action: 'move-up', disabled: index === 0, onSelect: () => store.actions.moveAlt(alt.id, joke.id, index - 1) },
     { label: 'Move down', action: 'move-down', disabled: index === count - 1, onSelect: () => store.actions.moveAlt(alt.id, joke.id, index + 1) },

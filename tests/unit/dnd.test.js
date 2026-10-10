@@ -3,7 +3,7 @@
 // elements are tiny fakes exposing only `children`, `hasAttribute` and `getBoundingClientRect`.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeInsertIndex, DROP_BY_KIND } from '../../js/ui/dnd.js';
+import { computeInsertIndex, edgeStep, DROP_BY_KIND } from '../../js/ui/dnd.js';
 
 /** A fake card occupying the given box (DOMRect-like). `isCard` false models a non-card child. */
 function box({ left = 0, top = 0, width = 100, height = 50, isCard = true } = {}) {
@@ -78,4 +78,17 @@ test('horizontal (topic columns) compares x against horizontal midpoints and ign
 
 test('DROP_BY_KIND maps each drag kind to its container attribute', () => {
   assert.deepEqual(DROP_BY_KIND, { topic: 'topics', joke: 'jokes', alt: 'alts', set: 'set' });
+});
+
+test('edgeStep scrolls only near an edge and never for a pointer well outside the box', () => {
+  // Box [100, 500], 40 px edge zones, up to 14 px per frame.
+  assert.equal(edgeStep(300, 100, 500), 0); // middle
+  assert.equal(edgeStep(100, 100, 500), -14); // on the top edge: full speed up
+  assert.equal(edgeStep(120, 100, 500), -7);
+  assert.equal(edgeStep(500, 100, 500), 14); // on the bottom edge: full speed down
+  assert.equal(edgeStep(480, 100, 500), 7);
+  assert.equal(edgeStep(80, 100, 500), -14); // just outside still counts as the edge
+  assert.equal(edgeStep(520, 100, 500), 14);
+  assert.equal(edgeStep(0, 100, 500), 0); // far outside (over another panel): nothing
+  assert.equal(edgeStep(900, 100, 500), 0);
 });

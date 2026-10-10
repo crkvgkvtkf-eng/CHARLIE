@@ -84,8 +84,13 @@ function findScroller(el, axis) {
   return null;
 }
 
-/** Signed scroll step for a pointer coordinate `p` inside [lo, hi]: negative near `lo`, positive near `hi`. */
-function edgeStep(p, lo, hi) {
+/**
+ * Signed scroll step for a pointer coordinate `p` near the edges of [lo, hi]: negative near `lo`,
+ * positive near `hi`, full speed just outside either edge, and 0 once the pointer is further than
+ * EDGE_PX beyond the box (over a neighbouring panel, say) or well inside it.
+ */
+export function edgeStep(p, lo, hi) {
+  if (p < lo - EDGE_PX || p > hi + EDGE_PX) return 0;
   if (p - lo < EDGE_PX) return -Math.ceil(((EDGE_PX - Math.max(0, p - lo)) / EDGE_PX) * MAX_SCROLL_PX_PER_FRAME);
   if (hi - p < EDGE_PX) return Math.ceil(((EDGE_PX - Math.max(0, hi - p)) / EDGE_PX) * MAX_SCROLL_PX_PER_FRAME);
   return 0;
@@ -148,10 +153,17 @@ function makeIndicator(doc) {
   return el;
 }
 
-/** Places the indicator over the gap at `index` inside `containerEl`. */
+/**
+ * Places the indicator over the gap at `index` inside `containerEl`. The indicator is fixed-position
+ * and so not clipped like the cards are; a gap that lies outside the container's scroller (during
+ * auto-scroll the pointer sits at the scroller's edge and the gap may be just past it) is hidden
+ * rather than painted over whatever is next to the list.
+ */
 function layoutIndicator(indicator, containerEl, index, { horizontal, excludeEl }) {
   const cards = cardsOf(containerEl, excludeEl);
   const box = containerEl.getBoundingClientRect();
+  const scroller = findScroller(containerEl, horizontal ? 'x' : 'y');
+  const clip = scroller ? scroller.getBoundingClientRect() : box;
   const thickness = 3;
   let pos; // the coordinate of the gap along the drag axis
   if (cards.length === 0) {
@@ -166,6 +178,11 @@ function layoutIndicator(indicator, containerEl, index, { horizontal, excludeEl 
     const a = cards[index - 1].getBoundingClientRect();
     const b = cards[index].getBoundingClientRect();
     pos = horizontal ? (a.right + b.left) / 2 : (a.bottom + b.top) / 2;
+  }
+  const [clipStart, clipEnd] = horizontal ? [clip.left, clip.right] : [clip.top, clip.bottom];
+  if (pos < clipStart || pos > clipEnd) {
+    indicator.style.display = 'none';
+    return;
   }
   indicator.setAttribute('data-orientation', horizontal ? 'vertical' : 'horizontal');
   if (horizontal) {
@@ -391,7 +408,9 @@ export function createDnd({ onDrop, onStateChange = () => {}, onPage = () => {} 
         scrolled = vScroller.scrollTop !== before;
       }
     }
-    if (g.board && g.board.getAttribute('data-dnd-hscroll') === '1') {
+    // The board scrolls sideways only for cards that can land in it; a set-row drag happens in the
+    // sidebar beside the board and must not carry the board away under the user.
+    if (g.kind !== 'set' && g.board && g.board.getAttribute('data-dnd-hscroll') === '1') {
       const r = g.board.getBoundingClientRect();
       const step = edgeStep(g.x, r.left, r.right);
       if (step) {
