@@ -8,7 +8,7 @@ same link shows the same appointments on every device you are signed in to.
 
 ## Open it on each device
 
-The app lives at the artifact link Claude gave you (also listed at <https://claude.ai/code/artifacts>).
+The app lives at <https://claude.ai/artifact/FsNWC5AkfKV4P6FJobJikH> (also listed at <https://claude.ai/code/artifacts>).
 
 - **Mac:** open the link in Safari or Chrome while signed in to claude.ai. Bookmark it, or Safari → File → Add to Dock.
 - **iPad / iPhone:** open the link in the Claude app or in Safari (signed in). Safari → Share → Add to Home Screen
@@ -47,5 +47,5 @@ npx playwright test tests/e2e/calendar.spec.js        # desktop + iPhone emulati
 `tests/e2e/calendarHarness.js` serves `index.html` in the published shape with a fake `window.claude` runtime
 (`db`, `user`, `downloads`), so the tests exercise exactly the file that gets published.
 
-To republish after a change, ask Claude to publish `calendar/index.html` to the existing artifact URL with
-`capabilities: { db: {}, user: {}, downloads: true }`.
+To republish after a change, ask Claude to publish `calendar/index.html` to the existing artifact URL
+(<https://claude.ai/artifact/FsNWC5AkfKV4P6FJobJikH>) with `capabilities: { db: {}, user: {}, downloads: true }`.
