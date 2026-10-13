@@ -85,3 +85,8 @@ js/                                             app code (ES modules, no build)
 vendor/                                         Preact + htm (MIT)
 tests/unit  tests/e2e                           node --test and Playwright
 ```
+
+## Also in this repository
+
+- **[Charlie's Datebook](calendar/README.md)** (`calendar/`): a calendar for appointments and reminders that syncs
+  across Mac, iPad and iPhone as a claude.ai artifact. Separate single-file app; see its README for how to open it.
