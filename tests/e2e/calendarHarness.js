@@ -69,7 +69,18 @@ export const FAKE_CLAUDE = `
     name: async () => 'Charlie', avatarUrl: async () => null, search: async () => [], email: async () => null,
   });
   const saves = [];
-  const downloads = Object.freeze({ save: async (req) => { saves.push({ filename: req.filename, data: typeof req.data === 'string' ? req.data : '[binary]' }); if (opt.declineDownload) throw err('declined'); return { status: 'saved' }; } });
+  // The real viewer only saves allow-listed extensions (downloads.d.ts); enforce the same list here.
+  const ALLOWED = ['gif','png','jpg','jpeg','webp','mp4','webm','txt','json','md','docx','pptx','epub','csv','ttf','html','svg','pdf','xlsx','zip'];
+  const downloads = Object.freeze({ save: async (req) => {
+    const ext = String(req.filename || '').split('.').pop().toLowerCase();
+    if (!(opt.allowedExtensions || ALLOWED).includes(ext)) throw err('rejected_extension');
+    let data = req.data;
+    if (data instanceof Blob) data = new Uint8Array(await data.arrayBuffer());
+    if (data instanceof ArrayBuffer) data = new Uint8Array(data);
+    saves.push({ filename: req.filename, text: typeof data === 'string' ? data : null, bytes: typeof data === 'string' ? null : Array.from(data) });
+    if (opt.declineDownload) throw err('declined');
+    return { status: 'saved' };
+  } });
   const memo = {};
   window.claude = {
     use: (name) => {
@@ -95,8 +106,9 @@ export const FAKE_CLAUDE = `
 
 /** Open the published page in `page` with the fake runtime (or none when options.db === 'none'). */
 export async function openDatebook(page, options = {}) {
-  const { clock, ...fakeOptions } = options;
+  const { clock, blockStorage, ...fakeOptions } = options;
   if (clock) await page.clock.install({ time: clock });
+  if (blockStorage) await page.addInitScript(() => { Object.defineProperty(window, 'localStorage', { get() { throw new Error('storage blocked'); } }); });
   if (fakeOptions.db !== 'none') {
     await page.addInitScript(`window.__fakeClaudeOptions = ${JSON.stringify(fakeOptions)};`);
     await page.addInitScript(FAKE_CLAUDE);
@@ -107,4 +119,15 @@ export async function openDatebook(page, options = {}) {
   await page.goto(PAGE_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#grid .day');
   return page;
+}
+
+/** Read the single stored (uncompressed) entry out of a zip the page produced. */
+export function unzipStored(bytes) {
+  const b = Uint8Array.from(bytes);
+  const dv = new DataView(b.buffer);
+  if (dv.getUint32(0, true) !== 0x04034b50) throw new Error('not a zip local header');
+  const size = dv.getUint32(22, true), nameLen = dv.getUint16(26, true), extraLen = dv.getUint16(28, true);
+  const name = new TextDecoder().decode(b.subarray(30, 30 + nameLen));
+  const data = new TextDecoder().decode(b.subarray(30 + nameLen + extraLen, 30 + nameLen + extraLen + size));
+  return { name, data, total: b.length };
 }

@@ -1,7 +1,7 @@
 // End-to-end tests for calendar/index.html (Charlie's Datebook), run against the published page shape
 // with a fake Artifact runtime (see calendarHarness.js). Runs in the existing desktop and iphone projects.
 import { test, expect } from '@playwright/test';
-import { openDatebook } from './calendarHarness.js';
+import { openDatebook, unzipStored } from './calendarHarness.js';
 
 const TODAY = new Date(2026, 9, 13, 10, 0, 0); // Tue 13 Oct 2026, 10:00 local
 
@@ -178,8 +178,8 @@ test.describe('Charlie\'s Datebook', () => {
     await expect(page.locator('#f-title')).toHaveValue('Call Mom');
   });
 
-  test('exports an .ics with alarms through the downloads capability', async ({ page }) => {
-    const seed = { e1: { kind: 'event', title: 'Dentist, downtown', date: '2026-10-20', allDay: false, start: '14:00', end: '15:00', repeat: 'weekly', until: '2026-12-01', alerts: [30, 0], category: 'health', location: 'Main St', notes: 'Bring card', doneDates: [], createdAt: 1, updatedAt: 1 } };
+  test('exports a zip holding an .ics with alarms through the downloads capability', async ({ page }) => {
+    const seed = { e1: { kind: 'event', title: 'Dentist, downtown ☕', date: '2026-10-20', allDay: false, start: '14:00', end: '15:00', repeat: 'weekly', until: '2026-12-01', alerts: [30, 0], category: 'health', location: 'Main St', notes: 'Bring card '.repeat(12), doneDates: [], createdAt: 1, updatedAt: 1 } };
     await openDatebook(page, { clock: TODAY, seed });
     await expectSynced(page);
     await page.locator('#menu-btn').click();
@@ -187,17 +187,121 @@ test.describe('Charlie\'s Datebook', () => {
     await expect(page.locator('.toast')).toContainText('Exported');
     const saves = await page.evaluate(() => window.__fake.saves);
     expect(saves).toHaveLength(1);
-    expect(saves[0].filename).toBe('charlies-datebook.ics');
-    const ics = saves[0].data;
+    expect(saves[0].filename).toBe('charlies-datebook.zip');
+    const { name, data: ics } = unzipStored(saves[0].bytes);
+    expect(name).toBe('charlies-datebook.ics');
     expect(ics).toContain('BEGIN:VCALENDAR');
-    expect(ics).toContain('SUMMARY:Dentist\\, downtown');
+    expect(ics).toContain('SUMMARY:Dentist\\, downtown ☕');
     expect(ics).toContain('DTSTART:20261020T140000');
     expect(ics).toContain('DTEND:20261020T150000');
     expect(ics).toContain('RRULE:FREQ=WEEKLY;UNTIL=20261201T235900');
     expect(ics).toContain('TRIGGER:-PT30M');
     expect(ics).toContain('TRIGGER:PT0M');
     expect(ics).toContain('LOCATION:Main St');
-    expect(ics.split('\r\n').every(l => l.length <= 75)).toBe(true);
+    const lines = ics.split('\r\n');
+    expect(lines.every(l => Buffer.byteLength(l, 'utf8') <= 75)).toBe(true);
+    expect(lines.some(l => l.startsWith(' '))).toBe(true); // the long DESCRIPTION folded
+    expect(ics.replace(/\r\n /g, '')).toContain('DESCRIPTION:' + 'Bring card '.repeat(12).trim());
+  });
+
+  test('hides export when the viewer refuses the file type', async ({ page }) => {
+    const seed = { e1: { kind: 'event', title: 'Lunch', date: '2026-10-13', allDay: true, repeat: 'none', alerts: [], category: 'other', doneDates: [], createdAt: 1, updatedAt: 1 } };
+    await openDatebook(page, { clock: TODAY, seed, allowedExtensions: ['txt'] });
+    await expectSynced(page);
+    await page.locator('#menu-btn').click();
+    await page.locator('#export-all-btn').click();
+    await expect(page.locator('.toast.error')).toContainText('aren’t available');
+    await expect(page.locator('#export-all-btn')).toBeHidden();
+    await expect(page.locator('#export-note')).toContainText('aren’t available');
+  });
+
+  test('a save made while still connecting is kept and written once the store answers', async ({ page, isMobile }) => {
+    await openDatebook(page, { clock: TODAY, delayMs: 1500 });
+    await expect(page.locator('#syncpill')).toHaveText('Connecting');
+    await page.locator(isMobile ? '#new-btn-mobile' : '#new-btn').click();
+    await page.fill('#f-title', 'Early bird');
+    await page.locator('#save-btn').click();
+    await expect(page.locator('#daypage .item-title')).toHaveText('Early bird');
+    await expectSynced(page);
+    await expect(page.locator('#daypage .item-title')).toHaveText('Early bird');
+    await expect.poll(async () => Object.values(await page.evaluate(() => window.__fake.docs())).map(d => d.title)).toEqual(['Early bird']);
+  });
+
+  test('alerts survive the all-day toggle and kind switch picks sensible defaults', async ({ page, isMobile }) => {
+    await openDatebook(page, { clock: TODAY });
+    await page.locator(isMobile ? '#new-btn-mobile' : '#new-btn').click();
+    await expect(page.locator('#f-alert1')).toHaveValue('15');
+    await page.locator('#f-allday').check();
+    await expect(page.locator('#f-alert1')).toHaveValue('0');
+    await expect(page.locator('#f-alert1 option:checked')).toHaveText('On the day (9 AM)');
+    await page.locator('#f-allday').uncheck();
+    await expect(page.locator('#f-alert1')).toHaveValue('15');
+    await page.locator('#kind-seg label:has(#kind-reminder)').click();
+    await expect(page.locator('#f-start')).toHaveValue('');
+    await expect(page.locator('#f-alert1')).toHaveValue('0');
+    await expect(page.locator('#editor-title')).toHaveText('New reminder');
+    await page.locator('#kind-seg label:has(#kind-event)').click();
+    await expect(page.locator('#f-start')).toHaveValue('10:30');
+    await expect(page.locator('#f-end')).toHaveValue('11:30');
+    await expect(page.locator('#f-alert1')).toHaveValue('15');
+  });
+
+  test('view-only viewers get a read-only calendar', async ({ page }) => {
+    const seed = { r1: { kind: 'reminder', title: 'Water plants', date: '2026-10-13', repeat: 'none', alerts: [], doneDates: [], createdAt: 1, updatedAt: 1 } };
+    await openDatebook(page, { clock: TODAY, seed, canWrite: false });
+    await expect(page.locator('#syncpill')).toHaveText('View only');
+    await expect(page.locator('#new-btn')).toBeHidden();
+    await expect(page.locator('#new-btn-mobile')).toBeHidden();
+    await expect(page.locator('#add-here')).toHaveCount(0);
+    await expect(page.locator('#daypage .done-check')).toBeDisabled();
+    await page.locator('#daypage .item-main').click();
+    await expect(page.locator('#editor-title')).toHaveText('Reminder');
+    await expect(page.locator('#save-btn')).toBeHidden();
+    await expect(page.locator('#f-title')).toBeDisabled();
+    await expect(page.locator('#delete-zone')).toBeHidden();
+  });
+
+  test('an alert that fires while the editor is open can be dismissed', async ({ page, isMobile }) => {
+    const seed = { e1: { kind: 'event', title: 'Call Mom', date: '2026-10-13', allDay: false, start: '10:15', end: '10:30', repeat: 'none', alerts: [15], category: 'family', doneDates: [], createdAt: 1, updatedAt: 1 } };
+    await openDatebook(page, { clock: TODAY, seed });
+    await expectSynced(page);
+    await page.locator(isMobile ? '#new-btn-mobile' : '#new-btn').click();
+    await page.clock.runFor(1000);
+    const alert = page.locator('#editor .toast.alert');
+    await expect(alert).toContainText('Call Mom');
+    await alert.getByRole('button', { name: 'Dismiss' }).click();
+    await expect(page.locator('.toast.alert')).toHaveCount(0);
+    await expect(page.locator('#editor')).toBeVisible();
+    await page.locator('#editor-close').click();
+    await expect(page.locator('#toasts')).toHaveCount(1);
+  });
+
+  test('alerts fire once even when browser storage is blocked, and late alerts are marked missed', async ({ page }) => {
+    const seed = {
+      e1: { kind: 'event', title: 'Call Mom', date: '2026-10-13', allDay: false, start: '10:15', end: '10:30', repeat: 'none', alerts: [15], category: 'family', doneDates: [], createdAt: 1, updatedAt: 1 },
+      e2: { kind: 'event', title: 'Breakfast', date: '2026-10-13', allDay: false, start: '08:00', end: '08:30', repeat: 'none', alerts: [0], category: 'personal', doneDates: [], createdAt: 1, updatedAt: 1 },
+    };
+    await openDatebook(page, { clock: TODAY, seed, blockStorage: true });
+    await expectSynced(page);
+    await page.clock.runFor(1000);
+    await expect(page.locator('.toast.alert')).toHaveCount(2);
+    await expect(page.locator('.toast.alert', { hasText: 'Breakfast' })).toContainText('Missed alert');
+    await page.clock.runFor(31_000);
+    await page.clock.runFor(31_000);
+    await expect(page.locator('.toast.alert')).toHaveCount(2);
+  });
+
+  test('keyboard focus stays put across live re-renders and month changes', async ({ page, isMobile }) => {
+    test.skip(isMobile, 'keyboard focus is a desktop concern');
+    const seed = { r1: { kind: 'reminder', title: 'Water plants', date: '2026-10-13', repeat: 'none', alerts: [], doneDates: [], createdAt: 1, updatedAt: 1 } };
+    await openDatebook(page, { clock: TODAY, seed });
+    await expectSynced(page);
+    await page.locator('#daypage .done-check').focus();
+    await page.keyboard.press('Space');
+    await expect(page.locator('#daypage .done-check')).toBeChecked();
+    await expect(page.locator('#daypage .done-check')).toBeFocused();
+    await page.locator('#next-btn').click();
+    await expect(page.locator('.day[tabindex="0"]')).toHaveAttribute('data-date', '2026-11-01');
   });
 
   test('keyboard: arrows move the selected day across months', async ({ page, isMobile }) => {

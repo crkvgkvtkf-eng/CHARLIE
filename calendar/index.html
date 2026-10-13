@@ -15,14 +15,14 @@
   --muted: #5d6763;
   --faint: #98a39e;
   --line: #d6ddd8;
-  --line-strong: #b7c1bb;
+  --line-strong: #8c968f;
   --accent: #0d6b66;
   --accent-fg: #ffffff;
   --accent-soft: #d5ebe8;
   --danger: #b1312e;
   --danger-fg: #ffffff;
   --danger-soft: #f7e2e0;
-  --ok: #2b7a47;
+  --ok: #256b3e;
   --ok-soft: #dcefe2;
   --warn: #8f540c;
   --warn-soft: #f8ebd2;
@@ -46,7 +46,7 @@
   :root:not([data-theme="light"]) {
     color-scheme: dark;
     --bg: #121615; --surface: #1a201e; --surface-2: #222a27; --surface-3: #2c3531;
-    --fg: #e8edeb; --muted: #a0aba6; --faint: #6b7571; --line: #2b3431; --line-strong: #3d4845;
+    --fg: #e8edeb; --muted: #a0aba6; --faint: #6b7571; --line: #2b3431; --line-strong: #6b7671;
     --accent: #58c1b9; --accent-fg: #0b1a18; --accent-soft: #1b3835;
     --danger: #f08078; --danger-fg: #2a0f0d; --danger-soft: #3b2321;
     --ok: #6ccf8c; --ok-soft: #1c3426; --warn: #f0b860; --warn-soft: #3c2f16;
@@ -65,7 +65,7 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #121615; --surface: #1a201e; --surface-2: #222a27; --surface-3: #2c3531;
-  --fg: #e8edeb; --muted: #a0aba6; --faint: #6b7571; --line: #2b3431; --line-strong: #3d4845;
+  --fg: #e8edeb; --muted: #a0aba6; --faint: #6b7571; --line: #2b3431; --line-strong: #6b7671;
   --accent: #58c1b9; --accent-fg: #0b1a18; --accent-soft: #1b3835;
   --danger: #f08078; --danger-fg: #2a0f0d; --danger-soft: #3b2321;
   --ok: #6ccf8c; --ok-soft: #1c3426; --warn: #f0b860; --warn-soft: #3c2f16;
@@ -92,6 +92,7 @@ body {
 }
 body:has(dialog[open]) { overflow: hidden; }
 button, input, select, textarea { font: inherit; color: inherit; }
+::placeholder { color: var(--muted); opacity: 1; }
 button { cursor: pointer; }
 h1, h2, h3 { margin: 0; font-weight: 600; text-wrap: balance; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -154,6 +155,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; text-wrap: balance; }
   background: var(--bg); border-bottom: 1px solid var(--line);
   padding-inline: 16px; padding-block: 10px 8px;
 }
+.topbar::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top, 0px); background: var(--bg); z-index: 5; }
 .topbar-inner { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 8px; }
 .topbar-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .wordmark { font-family: var(--font-display); font-weight: 400; font-size: 22px; letter-spacing: .01em; white-space: nowrap; }
@@ -182,7 +184,8 @@ main { flex: 1; width: 100%; max-width: 1280px; margin: 0 auto; padding-inline: 
   border: 0; background: var(--surface); color: var(--fg); text-align: left; position: relative;
 }
 .day:hover { background: var(--surface-2); }
-.day.other { color: var(--faint); background: color-mix(in srgb, var(--surface) 70%, var(--bg)); }
+.day.other { background: color-mix(in srgb, var(--surface) 70%, var(--bg)); }
+.day.other .num { color: var(--muted); font-weight: 500; }
 .day.selected { box-shadow: inset 0 0 0 2px var(--accent); }
 .day:focus-visible { outline-offset: -3px; z-index: 1; }
 .num {
@@ -195,8 +198,8 @@ main { flex: 1; width: 100%; max-width: 1280px; margin: 0 auto; padding-inline: 
   display: block; min-width: 0; padding: 2px 6px; border-radius: 5px; font-size: 12px; line-height: 1.35;
   background: var(--cat-bg); color: var(--cat-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500;
 }
-.chip .chip-time { opacity: .75; font-variant-numeric: tabular-nums; margin-right: 3px; }
-.chip.done { text-decoration: line-through; opacity: .6; }
+.chip .chip-time { font-weight: 400; font-variant-numeric: tabular-nums; margin-right: 3px; }
+.chip.done { text-decoration: line-through; }
 .chip.more { background: transparent; color: var(--muted); padding-left: 2px; }
 .dots { display: none; flex-wrap: wrap; gap: 3px; align-items: center; min-height: 8px; }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--cat-fg); display: inline-block; }
@@ -224,13 +227,15 @@ main { flex: 1; width: 100%; max-width: 1280px; margin: 0 auto; padding-inline: 
   padding: 10px 12px; border: 0; background: transparent; text-align: left; color: inherit;
 }
 .item-main:hover { background: var(--surface-2); }
+.item-main:focus-visible { outline-offset: -3px; }
 .item-time { grid-row: span 2; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; line-height: 1.3; }
 .item-time b { display: block; color: var(--fg); font-weight: 600; }
 .item-title { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
 .item-sub { font-size: 13px; color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
 .item.done .item-title { text-decoration: line-through; color: var(--muted); }
-.done-wrap { display: flex; align-items: center; padding: 0 12px 0 10px; }
+.done-wrap { display: flex; align-items: center; justify-content: center; min-width: 48px; padding: 0 4px 0 2px; cursor: pointer; }
 .done-check { width: 22px; height: 22px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.done-check:disabled { cursor: default; opacity: .5; }
 .empty { padding: 20px 16px; border: 1px dashed var(--line-strong); border-radius: var(--radius); color: var(--muted); text-align: center; }
 .empty b { color: var(--fg); font-weight: 600; }
 
@@ -262,6 +267,13 @@ main { flex: 1; width: 100%; max-width: 1280px; margin: 0 auto; padding-inline: 
   .month-title { font-size: 26px; }
 }
 @media (min-width: 720px) { .mobile-only { display: none !important; } }
+@media (pointer: coarse) {
+  .btn-icon { width: 44px; min-height: 44px; }
+  .btn-small { min-height: 40px; }
+  .seg > button, .seg > label { min-height: 40px; }
+  .swatch { min-height: 40px; }
+  .daypage-head .btn-small { min-height: 44px; }
+}
 
 /* Dialogs */
 dialog {
@@ -280,8 +292,8 @@ dialog::backdrop { background: var(--backdrop); }
 .field { display: flex; flex-direction: column; gap: 5px; min-width: 0; flex: 1; }
 .field > span, .field > legend { font-size: 13px; font-weight: 600; color: var(--muted); }
 .field input[type="text"], .field input[type="date"], .field input[type="time"], .field select, .field textarea {
-  width: 100%; min-height: 42px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px;
-  background: var(--surface); color: var(--fg); -webkit-appearance: none; appearance: none;
+  width: 100%; min-height: 44px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px;
+  background: var(--surface); color: var(--fg); -webkit-appearance: none; appearance: none; font-size: 16px;
 }
 .field select { background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 30px; }
 .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); outline: 2px solid var(--accent-soft); }
@@ -312,15 +324,15 @@ fieldset.field { border: 0; padding: 0; margin: 0; }
 .opt-text span { display: block; font-size: 13px; color: var(--muted); }
 hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
 
-/* Toasts */
+/* Toasts. While a dialog is open the container is moved inside it (everything else is inert under a modal)
+   and sits at the top of the screen so it never covers the sheet's Save button. */
 .toasts {
   position: fixed; left: 16px; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 50;
-  display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; margin: 0; padding: 0; border: 0;
-  background: transparent; color: inherit; width: auto; height: auto; max-width: none; max-height: none; overflow: visible; inset-inline: 16px; top: auto;
+  display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; margin: 0; padding: 0;
 }
-.toasts[popover]:popover-open { display: flex; }
 @media (max-width: 719px) { .toasts { bottom: calc(var(--tabbar-h) + 12px + env(safe-area-inset-bottom, 0px)); } }
 @media (min-width: 720px) { .toasts { left: auto; align-items: flex-end; } }
+dialog > .toasts { bottom: auto; top: calc(12px + env(safe-area-inset-top, 0px)); }
 .toast {
   pointer-events: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; width: min(100%, 420px);
   padding: 10px 12px 10px 14px; border-radius: 12px; background: var(--fg); color: var(--bg); box-shadow: var(--shadow-lg);
@@ -453,7 +465,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
         </span>
       </div>
       <div class="spacer"></div>
-      <button type="button" class="btn btn-ghost" id="export-one-btn" hidden>Export .ics</button>
+      <button type="button" class="btn btn-ghost" id="export-one-btn" hidden>Export</button>
       <button type="submit" class="btn btn-primary" id="save-btn">Save</button>
     </div>
   </form>
@@ -481,7 +493,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
       </div>
       <hr>
       <div class="opt">
-        <div class="opt-text"><b>Export everything (.ics)</b><span>Open the file on your Mac, iPad, or iPhone to add every appointment and reminder, with its alerts, to Apple Calendar. iCloud then carries them to all your devices.</span></div>
+        <div class="opt-text"><b>Export to Apple Calendar</b><span id="export-note">Saves a zip holding <i>charlies-datebook.ics</i>. Unzip it and open the .ics to add every appointment and reminder, with its alerts, to Calendar on your Mac, iPad, or iPhone. iCloud then carries them to all your devices.</span></div>
         <button type="button" class="btn btn-small" id="export-all-btn">Export</button>
       </div>
       <p class="hint">Alerts in this app appear while it is open on any device. Export to Apple Calendar for alerts when it is closed.</p>
@@ -493,7 +505,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
   </div>
 </dialog>
 
-<div id="toasts" class="toasts" popover="manual" aria-live="polite"></div>
+<div id="toasts" class="toasts" aria-live="polite"></div>
 
 <script>
 (function () {
@@ -552,6 +564,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
 
   // ----- model -------------------------------------------------------------
   var CATEGORIES = ['work', 'personal', 'health', 'family', 'travel', 'other'];
+  var CAT_NAMES = { work: 'Work', personal: 'Personal', health: 'Health', family: 'Family', travel: 'Travel', other: 'Other' };
   var REPEATS = ['none', 'daily', 'weekly', 'monthly', 'yearly'];
   var ALERTS_TIMED = [[0, 'At the time'], [5, '5 minutes before'], [10, '10 minutes before'], [15, '15 minutes before'], [30, '30 minutes before'], [60, '1 hour before'], [120, '2 hours before'], [1440, '1 day before'], [2880, '2 days before'], [10080, '1 week before']];
   var ALERTS_ALLDAY = [[0, 'On the day (9 AM)'], [1440, '1 day before (9 AM)'], [2880, '2 days before (9 AM)'], [10080, '1 week before (9 AM)']];
@@ -651,13 +664,25 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
   function savePrefs() { lsSet(PREFS_KEY, JSON.stringify({ monday: state.weekStart === 1, chime: state.chime })); }
 
   // ----- store: cloud (artifact db) or this browser ------------------------
+  // Until the store is known, writes wait for it (storeReady) instead of being dropped.
+  var storeReadyResolve;
+  var storeReady = new Promise(function (resolve) { storeReadyResolve = resolve; });
   var store = {
     kind: 'none',
-    put: function (doc) { return Promise.resolve(); },
-    remove: function (id) { return Promise.resolve(); }
+    put: function (doc) { return storeReady.then(function () { return store.put(doc); }); },
+    patch: function (id, fields, fallbackDoc) { return storeReady.then(function () { return store.patch(id, fields, fallbackDoc); }); },
+    remove: function (id) { return storeReady.then(function () { return store.remove(id); }); },
+    savePrefs: function () {}
   };
   var downloadsApi = null;
+  var exportsBlocked = false;
   var inViewer = !!(window.claude && typeof window.claude.use === 'function');
+  function withRetry(fn) {
+    return fn().catch(function (err) {
+      if (!err || err.code !== 'unavailable') throw err;
+      return new Promise(function (r) { setTimeout(r, 400 + Math.random() * 800); }).then(fn);
+    });
+  }
 
   function setupLocal() {
     store.kind = 'local';
@@ -679,7 +704,9 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
     state.loaded = true;
     window.addEventListener('storage', function (e) { if (e.key === ITEMS_KEY) { load(); render(); } });
     store.put = function (doc) { state.items.set(doc.id, doc); save(); return Promise.resolve(); };
+    store.patch = function (id, fields, fallbackDoc) { var cur = state.items.get(id); if (cur) state.items.set(id, Object.assign({}, cur, fields)); else if (fallbackDoc) state.items.set(id, fallbackDoc); save(); return Promise.resolve(); };
     store.remove = function (id) { state.items.delete(id); save(); return Promise.resolve(); };
+    storeReadyResolve();
     render();
   }
 
@@ -687,7 +714,8 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
     store.kind = 'cloud';
     state.storeKind = 'cloud';
     var col = db.collection('items');
-    var pending = new Map();
+    var pending = new Map();   // id -> promise chain, so one document gets one write at a time
+    var inflight = new Map();  // id -> doc (or null for a delete) overlaid on snapshots until the write settles
     function chain(id, fn) {
       var prev = pending.get(id) || Promise.resolve();
       var next = prev.then(fn, fn);
@@ -695,11 +723,29 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
       next.then(function () { if (pending.get(id) === next) pending.delete(id); }, function () { if (pending.get(id) === next) pending.delete(id); });
       return next;
     }
-    store.put = function (doc) { return chain(doc.id, function () { return col.doc(doc.id).set(doc); }); };
-    store.remove = function (id) { return chain(id, function () { return col.doc(id).delete(); }); };
+    function track(id, value, p) {
+      inflight.set(id, { value: value });
+      var marker = inflight.get(id);
+      var clear = function () { if (inflight.get(id) === marker) inflight.delete(id); };
+      p.then(clear, clear);
+      return p;
+    }
+    store.put = function (doc) { return track(doc.id, doc, chain(doc.id, function () { return withRetry(function () { return col.doc(doc.id).set(doc); }); })); };
+    store.patch = function (id, fields, fallbackDoc) {
+      // Merge-write so a tick on one device does not overwrite an edit made on another.
+      var merged = Object.assign({}, state.items.get(id) || fallbackDoc, fields);
+      return track(id, merged, chain(id, function () {
+        return withRetry(function () { return col.doc(id).update(fields); }).catch(function (err) {
+          if (err && err.code === 'invalid_argument' && fallbackDoc) return withRetry(function () { return col.doc(id).set(merged); });
+          throw err;
+        });
+      }));
+    };
+    store.remove = function (id) { return track(id, null, chain(id, function () { return withRetry(function () { return col.doc(id).delete(); }); })); };
     col.onSnapshot(function (snap) {
       var map = new Map();
       snap.docs.forEach(function (d) { if (d.exists) { var it = normalize(d.id, d.data()); if (it) map.set(d.id, it); } });
+      inflight.forEach(function (m, id) { if (m.value) map.set(id, m.value); else map.delete(id); });
       state.items = map;
       state.loaded = true;
       render();
@@ -712,13 +758,29 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
     if (userApi && typeof userApi.can === 'function') {
       userApi.can('data.write').then(function (v) { if (v === false) { state.writable = false; render(); } }).catch(function () {});
     }
+    // Preferences that should follow the person across devices live in one small document.
+    var prefsRef = db.doc('settings/prefs');
+    prefsRef.onSnapshot(function (snap) {
+      var d = snap.exists ? snap.data() : null;
+      if (d && typeof d.monday === 'boolean' && (d.monday ? 1 : 0) !== state.weekStart) { state.weekStart = d.monday ? 1 : 0; savePrefs(); render(); }
+    }, function () { /* keep the local preference */ });
+    store.savePrefs = function () { prefsRef.set({ monday: state.weekStart === 1, updatedAt: Date.now() }).catch(function () { /* view-only: local only */ }); };
+    storeReadyResolve();
     render();
   }
 
   function describeErr(err) {
     if (!err) return 'unknown error';
     if (typeof err === 'string') return err;
+    if (err.code === 'invalid_argument' && store.kind === 'cloud') return 'this calendar is view-only for you';
+    if (err.code === 'quota_exceeded') return 'the calendar is full; delete some old items';
+    if (err.code === 'resource_exhausted') return 'too many changes at once; try again in a moment';
+    if (err.code === 'unavailable') return 'the connection dropped; try again';
+    if (err.code === 'revoked') return 'your access changed; reload the page';
     return err.message || err.code || 'unknown error';
+  }
+  function markViewOnlyIf(err) {
+    if (err && err.code === 'invalid_argument' && store.kind === 'cloud') { state.writable = false; render(); }
   }
 
   function initStore() {
@@ -743,9 +805,20 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
       .forEach(function (id) { els[id] = document.getElementById(id); });
   }
 
+  function focusKey(el) {
+    if (!el || !el.closest || !el.closest('#main')) return null;
+    if (el.classList.contains('day')) return '.day[data-date="' + el.getAttribute('data-date') + '"]';
+    var li = el.closest('.item');
+    if (li) return (el.closest('#view-upcoming') ? '#view-upcoming ' : '#daypage ') + '.item[data-id="' + li.getAttribute('data-id') + '"][data-date="' + li.getAttribute('data-date') + '"] ' + (el.classList.contains('done-check') ? '.done-check' : '.item-main');
+    if (el.id) return '#' + el.id;
+    return null;
+  }
   function render() {
+    var keep = focusKey(document.activeElement);
     renderSync();
     renderTabs();
+    $('#new-btn').hidden = !state.writable;
+    $('#new-btn-mobile').hidden = !state.writable;
     if (state.view === 'month') {
       els['view-month'].hidden = false;
       els['view-upcoming'].hidden = true;
@@ -758,6 +831,12 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
       els['view-upcoming'].hidden = false;
       els['nav-row'].hidden = true;
       renderUpcoming();
+    }
+    if (keep) { var again = document.querySelector(keep); if (again && document.activeElement !== again) { try { again.focus({ preventScroll: true }); } catch (e) { again.focus(); } } }
+    if (editing.id && els.editor.open && !state.items.has(editing.id) && !editing.vanished) {
+      editing.vanished = true;
+      els['delete-zone'].hidden = true;
+      toast('“' + (editing.prev ? editing.prev.title : 'This item') + '” was deleted on another device. Saving will bring it back.', { sticky: true });
     }
   }
 
@@ -792,6 +871,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
     els.dow.innerHTML = dow;
 
     var cells = monthCells(state.cursor.y, state.cursor.m, ws);
+    var tabKey = cells.indexOf(state.selected) >= 0 ? state.selected : (cells.indexOf(t) >= 0 ? t : keyOf(new Date(state.cursor.y, state.cursor.m, 1)));
     var html = '';
     for (var w = 0; w < cells.length; w += 7) {
       html += '<div role="row">';
@@ -802,7 +882,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
         var list = itemsOn(k);
         var cls = 'day' + (other ? ' other' : '') + (k === t ? ' today' : '') + (k === state.selected ? ' selected' : '');
         var label = fmtLong(k) + (k === t ? ', today' : '') + (list.length ? ', ' + list.length + (list.length === 1 ? ' item' : ' items') : '');
-        html += '<div role="gridcell"><button type="button" class="' + cls + '" data-date="' + k + '" tabindex="' + (k === state.selected ? '0' : '-1') + '"' +
+        html += '<div role="gridcell"><button type="button" class="' + cls + '" data-date="' + k + '" tabindex="' + (k === tabKey ? '0' : '-1') + '"' +
           (k === t ? ' aria-current="date"' : '') + ' aria-pressed="' + (k === state.selected ? 'true' : 'false') + '" aria-label="' + esc(label) + '">' +
           '<span class="num" aria-hidden="true">' + d.getDate() + '</span>';
         if (list.length) {
@@ -834,11 +914,13 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
     if (it.location) sub.push(it.location);
     if (it.repeat !== 'none') sub.push('Repeats ' + { daily: 'daily', weekly: 'weekly', monthly: 'monthly', yearly: 'yearly' }[it.repeat]);
     if (opts.showDate) sub.unshift(fmtShort(k));
+    var name = [it.title, it.kind === 'reminder' ? 'reminder' : CAT_NAMES[it.category] || '', timeLabel(it)].concat(sub).filter(Boolean);
+    if (done) name.push('done');
     var html = '<li class="item ' + catClass(it) + (done ? ' done' : '') + '" data-id="' + esc(it.id) + '" data-date="' + k + '">';
     if (it.kind === 'reminder') {
-      html += '<span class="done-wrap"><input type="checkbox" class="done-check" aria-label="Mark ' + esc(it.title) + ' done"' + (done ? ' checked' : '') + '></span>';
+      html += '<label class="done-wrap"><input type="checkbox" class="done-check" aria-label="Mark ' + esc(it.title) + ' done"' + (done ? ' checked' : '') + (state.writable ? '' : ' disabled') + '></label>';
     }
-    html += '<button type="button" class="item-main" aria-label="Edit ' + esc(it.title) + '">' +
+    html += '<button type="button" class="item-main" aria-label="' + esc((state.writable ? 'Edit ' : 'Open ') + name.join(', ')) + '">' +
       '<span class="item-time"><b>' + esc(timeLabel(it)) + '</b>' + (it.kind === 'reminder' ? 'Reminder' : '') + '</span>' +
       '<span class="item-title">' + esc(it.title) + '</span>' +
       '<span class="item-sub">' + esc(sub.join(' · ')) + '</span>' +
@@ -904,10 +986,10 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
   }
 
   function renderExportAvailability() {
-    var available = !!downloadsApi || !inViewer;
-    els['export-all-btn'].disabled = !available;
-    els['export-all-btn'].title = available ? '' : 'Exports are not available in this view.';
+    var available = (!!downloadsApi || !inViewer) && !exportsBlocked;
+    els['export-all-btn'].hidden = !available;
     els['export-one-btn'].hidden = !available || !editing.id;
+    if (!available) $('#export-note').textContent = 'Exports aren’t available in this view. Open the page in a desktop browser or the Claude app to export.';
   }
 
   // ----- navigation --------------------------------------------------------
@@ -944,6 +1026,16 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
     sel.innerHTML = html;
     sel.value = current != null && options.some(function (o) { return String(o[0]) === String(current); }) ? String(current) : '';
   }
+  function mapLead(v, toAllDay) {
+    if (v === '') return '';
+    var n = +v;
+    if (!toAllDay) return String(n);
+    if (n < 1440) return '0';
+    var best = ALERTS_ALLDAY[0][0];
+    ALERTS_ALLDAY.forEach(function (o) { if (Math.abs(o[0] - n) < Math.abs(best - n)) best = o[0]; });
+    return String(best);
+  }
+  var timedAlertMemory = null; // alert values before switching to all-day, restored when switching back unchanged
   function syncFormUI() {
     var kind = formKind();
     var allDay = kind === 'event' ? f.allday.checked : !f.start.value;
@@ -956,13 +1048,25 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
     $('#until-field').hidden = f.repeat.value === 'none';
     $('#repeat-hint').hidden = !(editing.id && f.repeat.value !== 'none');
     var opts = allDay ? ALERTS_ALLDAY : ALERTS_TIMED;
-    var a1 = f.alert1.value, a2 = f.alert2.value;
-    if (f.alert1.getAttribute('data-mode') !== (allDay ? 'allday' : 'timed')) {
+    var mode = allDay ? 'allday' : 'timed', prevMode = f.alert1.getAttribute('data-mode');
+    if (prevMode !== mode) {
+      var a1 = f.alert1.value, a2 = f.alert2.value;
+      if (prevMode === 'timed' && mode === 'allday') { timedAlertMemory = { from: [a1, a2], to: [mapLead(a1, true), mapLead(a2, true)] }; a1 = timedAlertMemory.to[0]; a2 = timedAlertMemory.to[1]; }
+      else if (prevMode === 'allday' && mode === 'timed') {
+        if (timedAlertMemory && timedAlertMemory.to[0] === a1 && timedAlertMemory.to[1] === a2) { a1 = timedAlertMemory.from[0]; a2 = timedAlertMemory.from[1]; }
+        else { a1 = mapLead(a1, false); a2 = mapLead(a2, false); }
+      }
       fillAlertOptions(f.alert1, opts, a1);
       fillAlertOptions(f.alert2, opts, a2);
-      f.alert1.setAttribute('data-mode', allDay ? 'allday' : 'timed');
+      f.alert1.setAttribute('data-mode', mode);
     }
-    els['editor-title'].textContent = (editing.id ? 'Edit ' : 'New ') + (kind === 'reminder' ? 'reminder' : 'appointment');
+    var readOnly = !state.writable;
+    els['editor-title'].textContent = readOnly ? (kind === 'reminder' ? 'Reminder' : 'Appointment') : (editing.id ? 'Edit ' : 'New ') + (kind === 'reminder' ? 'reminder' : 'appointment');
+  }
+  function setFormReadOnly(ro) {
+    $$('input, select, textarea', els['editor-form']).forEach(function (el) { el.disabled = ro; });
+    els['save-btn'].hidden = ro;
+    if (ro) els['delete-zone'].hidden = true;
   }
   function defaultStart(k) {
     if (k !== todayKey()) return '09:00';
@@ -973,8 +1077,10 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
   function openEditor(opts) {
     opts = opts || {};
     var item = opts.id ? state.items.get(opts.id) : null;
-    editing = { id: item ? item.id : null, returnFocus: document.activeElement, prev: item || null };
+    editing = { id: item ? item.id : null, returnFocus: document.activeElement, prev: item || null, vanished: false, conflictSeen: false };
+    timedAlertMemory = null;
     els['editor-form'].reset();
+    setFormReadOnly(false);
     els['form-error'].hidden = true;
     els['delete-confirm'].hidden = true;
     els['delete-btn'].hidden = false;
@@ -987,7 +1093,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
     f.title.value = item ? item.title : '';
     f.date.value = k;
     f.allday.checked = item ? (item.kind === 'event' && item.allDay) : false;
-    if (item && item.kind === 'event') { f.start.value = item.allDay ? defaultStart(k) : item.start; f.end.value = item.allDay ? minToTime(timeToMin(f.start.value) + 60) : item.end; }
+    if (item && item.kind === 'event') { f.start.value = item.allDay ? defaultStart(k) : item.start; f.end.value = item.allDay ? minToTime(Math.min(timeToMin(f.start.value) + 60, 1439)) : item.end; }
     else if (item && item.kind === 'reminder') { f.start.value = item.time || ''; f.end.value = ''; }
     else { f.start.value = kind === 'event' ? defaultStart(k) : ''; f.end.value = kind === 'event' ? minToTime(Math.min(timeToMin(f.start.value) + 60, 1439)) : ''; }
     f.repeat.value = item ? item.repeat : 'none';
@@ -1000,16 +1106,31 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
     var alerts = item ? item.alerts : (kind === 'event' ? [15] : [0]);
     f.alert1.value = alerts.length > 0 ? String(alerts[0]) : '';
     f.alert2.value = alerts.length > 1 ? String(alerts[1]) : '';
-    if (f.alert1.value === '' && alerts.length) f.alert1.value = '';
     els['delete-zone'].hidden = !item;
+    if (!state.writable) setFormReadOnly(true);
     renderExportAvailability();
     els.editor.showModal();
-    setTimeout(function () { f.title.focus(); }, 0);
+    placeToasts();
+    setTimeout(function () { (state.writable ? f.title : $('#editor-close')).focus(); }, 0);
+  }
+  function onKindChange() {
+    // A brand-new item switches sensible defaults with its kind; an existing item keeps what it has.
+    if (!editing.id) {
+      var k = isValidKey(f.date.value) ? f.date.value : todayKey();
+      if (formKind() === 'reminder') { f.start.value = ''; f.end.value = ''; }
+      else { f.start.value = defaultStart(k); f.end.value = minToTime(Math.min(timeToMin(f.start.value) + 60, 1439)); }
+      f.alert1.removeAttribute('data-mode'); timedAlertMemory = null;
+      syncFormUI();
+      f.alert1.value = formKind() === 'reminder' ? '0' : '15';
+      f.alert2.value = '';
+      return;
+    }
+    syncFormUI();
   }
   function closeEditor() {
     if (els.editor.open) els.editor.close();
     var rf = editing.returnFocus;
-    editing = { id: null, returnFocus: null, prev: null };
+    editing = { id: null, returnFocus: null, prev: null, vanished: false, conflictSeen: false };
     if (rf && document.contains(rf) && typeof rf.focus === 'function') rf.focus();
   }
   function showFormError(msg, field) {
@@ -1058,9 +1179,15 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
     return doc;
   }
   function saveFromForm() {
+    if (!state.writable) return;
     var doc = readForm();
     if (!doc) return;
     var prev = state.items.get(doc.id) || null;
+    if (prev && editing.prev && prev !== editing.prev && prev.updatedAt > editing.prev.updatedAt && !editing.conflictSeen) {
+      editing.conflictSeen = true;
+      showFormError('This was changed on another device while you were editing. Save again to overwrite that change, or close to keep it.');
+      return;
+    }
     state.items.set(doc.id, doc);
     if (state.view === 'month' && doc.repeat === 'none') {
       var d = parseKey(doc.date);
@@ -1073,13 +1200,14 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
     }, function (err) {
       if (prev) state.items.set(doc.id, prev); else state.items.delete(doc.id);
       render();
-      if (err && err.code === 'invalid_argument' && store.kind === 'cloud') { state.writable = false; render(); }
+      markViewOnlyIf(err);
       toast('Couldn’t save “' + doc.title + '”: ' + describeErr(err), { kind: 'error', sticky: true });
     });
   }
   function deleteEditing() {
     var id = editing.id, prev = state.items.get(id);
-    if (!id || !prev) return;
+    if (!id) return;
+    if (!prev) { closeEditor(); toast('Already deleted on another device.'); return; }
     state.items.delete(id);
     closeEditor();
     render();
@@ -1088,33 +1216,35 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
       toast('Deleted “' + prev.title + '”.');
     }, function (err) {
       state.items.set(id, prev); render();
+      markViewOnlyIf(err);
       toast('Couldn’t delete “' + prev.title + '”: ' + describeErr(err), { kind: 'error', sticky: true });
     });
   }
   function toggleDone(id, k, done) {
     var it = state.items.get(id);
-    if (!it || it.kind !== 'reminder') return;
+    if (!it || it.kind !== 'reminder' || !state.writable) return;
     var prev = it;
-    var next = Object.assign({}, it, { doneDates: it.doneDates.filter(function (x) { return x !== k; }), updatedAt: Date.now() });
-    if (done) next.doneDates.push(k);
+    var doneDates = it.doneDates.filter(function (x) { return x !== k; });
+    if (done) doneDates.push(k);
+    // Keep only the last year of ticks so a daily reminder's document never grows without bound.
+    var floor = addDays(todayKey(), -366);
+    doneDates = doneDates.filter(function (x) { return x >= floor; }).sort();
+    var fields = { doneDates: doneDates, updatedAt: Date.now() };
+    var next = Object.assign({}, it, fields);
     state.items.set(id, next);
     render();
-    store.put(next).catch(function (err) {
+    store.patch(id, fields, next).catch(function (err) {
       state.items.set(id, prev); render();
+      markViewOnlyIf(err);
       toast('Couldn’t update “' + it.title + '”: ' + describeErr(err), { kind: 'error', sticky: true });
     });
   }
 
   // ----- toasts ------------------------------------------------------------
-  function raiseToasts() {
-    var el = els.toasts;
-    if (typeof el.showPopover !== 'function') return;
-    try { if (el.matches(':popover-open')) el.hidePopover(); el.showPopover(); } catch (e) { /* unsupported */ }
-  }
-  function lowerToastsIfEmpty() {
-    var el = els.toasts;
-    if (el.children.length || typeof el.hidePopover !== 'function') return;
-    try { if (el.matches(':popover-open')) el.hidePopover(); } catch (e) { /* ignore */ }
+  // A modal dialog makes the rest of the document inert, so while one is open the toasts live inside it.
+  function placeToasts() {
+    var host = document.querySelector('dialog[open]') || document.body;
+    if (els.toasts.parentNode !== host) host.appendChild(els.toasts);
   }
   function toast(message, opts) {
     opts = opts || {};
@@ -1136,9 +1266,9 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
     close.setAttribute('aria-label', 'Dismiss'); close.addEventListener('click', dismiss);
     if (opts.sticky || (opts.actions && opts.actions.length)) el.appendChild(close);
     var timer = null;
-    function dismiss() { if (timer) clearTimeout(timer); if (el.parentNode) el.parentNode.removeChild(el); lowerToastsIfEmpty(); }
+    function dismiss() { if (timer) clearTimeout(timer); if (el.parentNode) el.parentNode.removeChild(el); }
     els.toasts.appendChild(el);
-    raiseToasts();
+    placeToasts();
     if (!opts.sticky && !(opts.actions && opts.actions.length)) timer = setTimeout(dismiss, 3500);
     return dismiss;
   }
@@ -1167,7 +1297,13 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
       });
     } catch (e) { /* audio unavailable */ }
   }
+  var firedMem = {}; // alerts shown this page load, so a blocked localStorage never repeats them
   function loadFired() { try { var v = JSON.parse(lsGet(FIRED_KEY) || '{}'); return v && typeof v === 'object' ? v : {}; } catch (e) { return {}; } }
+  function alertTime(item, k, lead) {
+    // Day-sized leads shift whole days so a "1 day before" alert keeps its clock time across a DST change.
+    if (lead >= 1440 && lead % 1440 === 0) return occStart(item, addDays(k, -lead / 1440)).getTime();
+    return occStart(item, k).getTime() - lead * 60000;
+  }
   function leadLabel(lead, item) {
     if (!isTimed(item)) return lead === 0 ? 'Today' : (lead === 1440 ? 'Tomorrow' : 'In ' + Math.round(lead / 1440) + ' days');
     if (lead === 0) return 'Now';
@@ -1175,35 +1311,35 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
     if (lead < 1440) return 'In ' + (lead / 60) + (lead === 60 ? ' hour' : ' hours');
     return 'In ' + (lead / 1440) + (lead === 1440 ? ' day' : ' days');
   }
-  function fireAlert(item, k, lead) {
+  function fireAlert(item, k, lead, late) {
     var when = (k === todayKey() ? '' : fmtShort(k) + ' · ') + timeLabel(item) + (item.location ? ' · ' + item.location : '');
+    var head = late ? 'Missed alert' : leadLabel(lead, item);
     toast(item.title, {
-      kind: 'alert', detail: leadLabel(lead, item) + ' · ' + when, sticky: true,
+      kind: 'alert', detail: head + ' · ' + when, sticky: true,
       actions: [{ label: 'Open', primary: true, onClick: function () { selectDay(k, false); openEditor({ id: item.id }); } }]
     });
     chime();
     try {
       if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
-        new Notification(item.title, { body: leadLabel(lead, item) + ' · ' + when, tag: item.id + '|' + k + '|' + lead });
+        new Notification(item.title, { body: head + ' · ' + when, tag: item.id + '|' + k + '|' + lead });
       }
     } catch (e) { /* notifications unavailable */ }
   }
   function tickAlerts() {
     if (!state.loaded || !state.items.size) return;
     var now = Date.now(), fired = loadFired(), changed = false, t = todayKey();
-    var window_ms = 10 * 60 * 1000;
+    var catchUp = 12 * 60 * 60 * 1000, lateAfter = 10 * 60 * 1000;
     for (var d = -1; d <= 8; d++) {
       var k = addDays(t, d);
       state.items.forEach(function (it) {
         if (!it.alerts.length || !occursOn(it, k) || isDone(it, k)) return;
-        var startMs = occStart(it, k).getTime();
         it.alerts.forEach(function (lead) {
-          var fireAt = startMs - lead * 60000;
-          if (fireAt > now || fireAt <= now - window_ms) return;
+          var fireAt = alertTime(it, k, lead);
+          if (fireAt > now || fireAt <= now - catchUp) return;
           var key = it.id + '|' + k + '|' + lead;
-          if (fired[key]) return;
-          fired[key] = now; changed = true;
-          fireAlert(it, k, lead);
+          if (fired[key] || firedMem[key]) return;
+          fired[key] = now; firedMem[key] = now; changed = true;
+          fireAlert(it, k, lead, now - fireAt > lateAfter);
         });
       });
     }
@@ -1228,7 +1364,47 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
 
   // ----- ICS export --------------------------------------------------------
   function icsText(s) { return String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n'); }
-  function icsFold(line) { var out = []; while (line.length > 70) { out.push(line.slice(0, 70)); line = ' ' + line.slice(70); } out.push(line); return out.join('\r\n'); }
+  var utf8 = new TextEncoder(), utf8d = new TextDecoder();
+  function icsFold(line) {
+    // RFC 5545: lines are at most 75 octets; continuation lines start with one space. Never split a UTF-8 sequence.
+    var bytes = utf8.encode(line), out = [], pos = 0, first = true;
+    while (bytes.length - pos > (first ? 75 : 74)) {
+      var cut = pos + (first ? 75 : 74);
+      while (cut > pos && (bytes[cut] & 0xC0) === 0x80) cut--;
+      out.push((first ? '' : ' ') + utf8d.decode(bytes.subarray(pos, cut)));
+      pos = cut; first = false;
+    }
+    out.push((first ? '' : ' ') + utf8d.decode(bytes.subarray(pos)));
+    return out.join('\r\n');
+  }
+  // Minimal ZIP writer (stored entries, UTF-8 names): the viewer only hands out allow-listed file types, and .zip is one.
+  var crcTable = null;
+  function crc32(bytes) {
+    if (!crcTable) { crcTable = new Uint32Array(256); for (var n = 0; n < 256; n++) { var c = n; for (var k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; crcTable[n] = c >>> 0; } }
+    var crc = 0xFFFFFFFF;
+    for (var i = 0; i < bytes.length; i++) crc = crcTable[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+  function makeZip(entries) {
+    var d = new Date();
+    var dosTime = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+    var dosDate = ((Math.max(d.getFullYear(), 1980) - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+    function u16(v) { return [v & 0xFF, (v >>> 8) & 0xFF]; }
+    function u32(v) { return [v & 0xFF, (v >>> 8) & 0xFF, (v >>> 16) & 0xFF, (v >>> 24) & 0xFF]; }
+    var parts = [], central = [], offset = 0;
+    entries.forEach(function (e) {
+      var name = utf8.encode(e.name), data = utf8.encode(e.data), crc = crc32(data);
+      var head = new Uint8Array([].concat([0x50, 0x4B, 0x03, 0x04], u16(20), u16(0x0800), u16(0), u16(dosTime), u16(dosDate), u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0)));
+      parts.push(head, name, data);
+      central.push(new Uint8Array([].concat([0x50, 0x4B, 0x01, 0x02], u16(20), u16(20), u16(0x0800), u16(0), u16(dosTime), u16(dosDate), u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(offset))), name);
+      offset += head.length + name.length + data.length;
+    });
+    var cdSize = central.reduce(function (n, p) { return n + p.length; }, 0);
+    var all = parts.concat(central, [new Uint8Array([].concat([0x50, 0x4B, 0x05, 0x06], u16(0), u16(0), u16(entries.length), u16(entries.length), u32(cdSize), u32(offset), u16(0)))]);
+    var out = new Uint8Array(all.reduce(function (n, p) { return n + p.length; }, 0)), pos = 0;
+    all.forEach(function (p) { out.set(p, pos); pos += p.length; });
+    return out;
+  }
   function icsDate(k) { return k.replace(/-/g, ''); }
   function icsDateTime(k, t) { return icsDate(k) + 'T' + t.replace(':', '') + '00'; }
   function icsDuration(mins) {
@@ -1271,14 +1447,20 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
     return L.map(icsFold).join('\r\n') + '\r\n';
   }
   function safeFilename(s) { return (s.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') || 'datebook').slice(0, 60); }
-  function exportIcs(items, filename) {
+  function exportIcs(items, baseName) {
     if (!items.length) { toast('Nothing to export yet.'); return; }
     var text = buildIcs(items);
-    if (downloadsApi) {
-      downloadsApi.save({ filename: filename, data: text }).then(function () {
-        toast('Exported. Open the file to add it to Apple Calendar.');
+    if (downloadsApi && !exportsBlocked) {
+      var zip = makeZip([{ name: baseName + '.ics', data: text }]);
+      downloadsApi.save({ filename: baseName + '.zip', data: new Blob([zip], { type: 'application/zip' }) }).then(function () {
+        toast('Exported.', { detail: 'Unzip it, then open ' + baseName + '.ics to add everything to Apple Calendar.', sticky: true });
       }, function (err) {
         if (err && err.code === 'declined') return;
+        if (err && (err.code === 'rejected_extension' || err.code === 'extension_not_enabled' || err.code === 'unavailable')) {
+          exportsBlocked = true; renderExportAvailability();
+          toast('Exports aren’t available in this view.', { kind: 'error' });
+          return;
+        }
         toast('Couldn’t export: ' + describeErr(err), { kind: 'error', sticky: true });
       });
       return;
@@ -1286,9 +1468,9 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
     if (inViewer) { toast('Exports aren’t available in this view.', { kind: 'error' }); return; }
     try {
       var url = URL.createObjectURL(new Blob([text], { type: 'text/calendar' }));
-      var a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+      var a = document.createElement('a'); a.href = url; a.download = baseName + '.ics'; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
-      toast('Exported. Open the file to add it to Apple Calendar.');
+      toast('Exported.', { detail: 'Open ' + baseName + '.ics to add everything to Apple Calendar.', sticky: true });
     } catch (e) { toast('Couldn’t export: ' + describeErr(e), { kind: 'error', sticky: true }); }
   }
 
@@ -1303,6 +1485,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
     renderNotifyStatus();
     renderExportAvailability();
     els.options.showModal();
+    placeToasts();
   }
 
   // ----- events ------------------------------------------------------------
@@ -1318,8 +1501,11 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
     els.grid.addEventListener('click', function (e) {
       var b = e.target.closest('.day'); if (!b) return;
       var k = b.getAttribute('data-date');
-      if (k === state.selected && state.writable) openEditor({ date: k });
-      else selectDay(k, true);
+      if (k === state.selected && state.writable) { openEditor({ date: k }); return; }
+      selectDay(k, true);
+      // When the day page sits under the grid (phones, iPad portrait), bring it into view if it is off screen.
+      var r = els.daypage.getBoundingClientRect();
+      if (window.innerWidth < 900 && r.top > window.innerHeight - 80) els.daypage.scrollIntoView({ block: 'start', behavior: 'smooth' });
     });
     els.grid.addEventListener('keydown', function (e) {
       var b = e.target.closest('.day'); if (!b) return;
@@ -1355,9 +1541,10 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
     $('#editor-close').addEventListener('click', closeEditor);
     els.editor.addEventListener('cancel', function (e) { e.preventDefault(); closeEditor(); });
     els.editor.addEventListener('click', function (e) { if (e.target === els.editor) closeEditor(); });
-    ['change'].forEach(function (ev) {
-      [f.kindEvent, f.kindReminder, f.allday, f.repeat].forEach(function (el) { el.addEventListener(ev, syncFormUI); });
-    });
+    els.editor.addEventListener('close', placeToasts);
+    els.options.addEventListener('close', placeToasts);
+    [f.kindEvent, f.kindReminder].forEach(function (el) { el.addEventListener('change', onKindChange); });
+    [f.allday, f.repeat].forEach(function (el) { el.addEventListener('change', syncFormUI); });
     f.start.addEventListener('change', function () {
       if (formKind() === 'reminder') { syncFormUI(); return; }
       if (isValidTime(f.start.value) && (!isValidTime(f.end.value) || timeToMin(f.end.value) <= timeToMin(f.start.value))) {
@@ -1370,19 +1557,19 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
     $('#delete-yes').addEventListener('click', deleteEditing);
     els['export-one-btn'].addEventListener('click', function () {
       var doc = readForm(); if (!doc) return;
-      exportIcs([normalize(doc.id, doc)], safeFilename(doc.title) + '.ics');
+      exportIcs([normalize(doc.id, doc)], safeFilename(doc.title));
     });
 
     // options
     $('#options-close').addEventListener('click', function () { els.options.close(); });
     $('#options-done').addEventListener('click', function () { els.options.close(); });
     els.options.addEventListener('click', function (e) { if (e.target === els.options) els.options.close(); });
-    $('#opt-monday').addEventListener('change', function (e) { state.weekStart = e.target.checked ? 1 : 0; savePrefs(); render(); });
+    $('#opt-monday').addEventListener('change', function (e) { state.weekStart = e.target.checked ? 1 : 0; savePrefs(); store.savePrefs(); render(); });
     $('#opt-chime').addEventListener('change', function (e) { state.chime = e.target.checked; savePrefs(); unlockAudio(); if (state.chime) chime(); });
     els['notify-btn'].addEventListener('click', requestNotify);
     els['export-all-btn'].addEventListener('click', function () {
       var all = []; state.items.forEach(function (it) { all.push(it); });
-      exportIcs(all, 'charlies-datebook.ics');
+      exportIcs(all, 'charlies-datebook');
     });
 
     document.addEventListener('pointerdown', unlockAudio, { passive: true });
@@ -1390,9 +1577,9 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
     document.addEventListener('keydown', function (e) {
       if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
       if (els.editor.open || els.options.open) return;
-      var tag = (e.target.tagName || '').toLowerCase();
-      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
-      if (e.key === 'n' || e.key === 'N') { e.preventDefault(); openEditor({ date: state.selected }); }
+      // Single-key shortcuts only while a day cell has focus, so they never fire unexpectedly elsewhere.
+      if (!e.target.classList || !e.target.classList.contains('day')) return;
+      if ((e.key === 'n' || e.key === 'N') && state.writable) { e.preventDefault(); openEditor({ date: state.selected }); }
       else if (e.key === 't' || e.key === 'T') { e.preventDefault(); goToday(); }
     });
     document.addEventListener('visibilitychange', function () { if (!document.hidden) tickAlerts(); });
